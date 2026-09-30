@@ -62,6 +62,13 @@
   input[type=range] { width: 100%; }
   #map { height: 100vh; }
   #map.drawing { cursor: crosshair; }
+  .seg { display: flex; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--muted); }
+  .seg button.on { background: var(--bg); color: var(--ink); font-weight: 600; }
+  .pin { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45);
+         color: #fff; font: 700 11px/18px -apple-system, sans-serif; text-align: center; }
+  .pin.a { background: #2e9d5b; } .pin.b { background: #c8372d; }
+  .err { color: var(--err); }
   .hint { position: absolute; z-index: 1000; left: 50%; top: 12px; transform: translateX(-50%); background: var(--panel);
           color: var(--ink); padding: 6px 12px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.2); font-size: 13px; display: none; }
   main { position: relative; }
@@ -75,23 +82,44 @@
 <aside>
   <header>
     <h1>River REM Studio</h1>
-    <p>Draw an area, pick a river, and generate a relative elevation model from USGS 3DEP and NHD.</p>
+    <p>Pick a stretch of river and generate a relative elevation model from USGS 3DEP and NHD.</p>
   </header>
 
   <section id="s-area">
     <h2><span class="num">1</span>Area</h2>
-    <div class="row">
-      <button id="btn-draw" class="primary">Draw area</button>
-      <button id="btn-clear" disabled>Clear</button>
+    <div class="seg" role="tablist">
+      <button id="mode-stretch" class="on" role="tab">Pick stretch</button>
+      <button id="mode-box" role="tab">Draw box</button>
     </div>
-    <div id="area-info" class="muted" style="margin-top:8px">Click “Draw area”, then drag a box around the stretch of river.</div>
+    <div id="stretch-ui">
+      <div class="row">
+        <button id="btn-pick" class="primary">Click start &amp; end</button>
+        <button id="btn-clear-stretch" disabled>Clear</button>
+      </div>
+      <label for="corridor">Corridor width (each side of the river)</label>
+      <select id="corridor">
+        <option value="500">500 m</option><option value="1000">1 km</option>
+        <option value="1500" selected>1.5 km</option><option value="2000">2 km</option>
+        <option value="3000">3 km</option><option value="5000">5 km</option>
+      </select>
+      <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="clip" checked> Clip output to the corridor</label>
+    </div>
+    <div id="box-ui" hidden>
+      <div class="row">
+        <button id="btn-draw" class="primary">Draw area</button>
+        <button id="btn-clear" disabled>Clear</button>
+      </div>
+    </div>
+    <div id="area-info" class="muted" style="margin-top:8px"></div>
   </section>
 
   <section id="s-river">
     <h2><span class="num">2</span>River</h2>
-    <div id="river-info" class="muted">Rivers in your area will appear here and on the map.</div>
-    <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="show-ditches"> Show ditches &amp; canals</label>
-    <ul id="river-list" class="list" hidden></ul>
+    <div id="river-info" class="muted"></div>
+    <div id="river-box-ui" hidden>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="show-ditches"> Show ditches &amp; canals</label>
+      <ul id="river-list" class="list" hidden></ul>
+    </div>
   </section>
 
   <section id="s-settings">
@@ -150,8 +178,11 @@ const STEPS = [["centerline", "Fetching NHD centerline"], ["dem", "Downloading 3
                ["preview", "Building map preview"], ["done", "Done"]];
 const DITCH = /ditch|canal|lateral|drain|flume/i;
 
-const state = { bbox: null, rect: null, rivers: [], riverLayer: null, selected: null,
-                estimate: null, jobId: null, overlay: null, poll: null };
+const state = { mode: "stretch", bbox: null, rect: null, rivers: [], riverLayer: null, selected: null,
+                estimate: null, jobId: null, overlay: null, poll: null,
+                picking: 0, pins: [], stretch: null, stretchLayer: null, corridorLayer: null, traceSeq: 0 };
+const HINTS = { draw: "Drag to draw the area · Esc to cancel", start: "Click the start of the stretch · Esc to cancel",
+                end: "Click the end of the stretch · Esc to cancel" };
 
 // ---------- map
 const map = L.map("map", { zoomControl: true }).setView([39.0, -106.2], 9);
@@ -170,15 +201,137 @@ L.control.scale({ imperial: true }).addTo(map);
 
 // ---------- rectangle drawing
 let drawing = false, start = null;
+function showHint(text) {
+  $("hint").textContent = text || "";
+  $("hint").style.display = text ? "block" : "none";
+  $("map").classList.toggle("drawing", !!text);
+}
 function setDrawing(on) {
   drawing = on;
   $("btn-draw").classList.toggle("active", on);
-  $("map").classList.toggle("drawing", on);
-  $("hint").style.display = on ? "block" : "none";
+  showHint(on ? HINTS.draw : "");
   on ? map.dragging.disable() : map.dragging.enable();
 }
 $("btn-draw").onclick = () => setDrawing(!drawing);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") setDrawing(false); });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  setDrawing(false);
+  if (state.picking) { state.picking = 0; $("btn-pick").classList.remove("active"); showHint(""); }
+});
+
+// ---------- modes
+function setMode(mode) {
+  if (mode === state.mode) return;
+  clearArea(); clearStretch(); setDrawing(false);
+  state.mode = mode;
+  $("mode-stretch").classList.toggle("on", mode === "stretch");
+  $("mode-box").classList.toggle("on", mode === "box");
+  $("stretch-ui").hidden = mode !== "stretch";
+  $("box-ui").hidden = mode !== "box";
+  $("river-box-ui").hidden = mode !== "box";
+  resetInfo();
+}
+$("mode-stretch").onclick = () => setMode("stretch");
+$("mode-box").onclick = () => setMode("box");
+function resetInfo() {
+  $("area-info").textContent = state.mode === "stretch"
+    ? "Click “Click start & end”, then click two points on a river. Drag the pins to adjust."
+    : "Click “Draw area”, then drag a box around the stretch of river.";
+  $("river-info").textContent = state.mode === "stretch"
+    ? "The river is chosen from your two points."
+    : "Rivers in your area will appear here and on the map.";
+}
+
+// ---------- stretch picking
+const pinIcon = (cls, label) => L.divIcon({ className: "", html: `<div class="pin ${cls}">${label}</div>`, iconSize: [22, 22], iconAnchor: [11, 11] });
+$("btn-pick").onclick = () => {
+  clearStretch();
+  state.picking = 1;
+  $("btn-pick").classList.add("active");
+  showHint(HINTS.start);
+};
+$("btn-clear-stretch").onclick = () => { clearStretch(); resetInfo(); };
+map.on("click", (e) => {
+  if (!state.picking) return;
+  const isStart = state.picking === 1;
+  const pin = L.marker(e.latlng, { draggable: true, icon: pinIcon(isStart ? "a" : "b", isStart ? "A" : "B") }).addTo(map);
+  pin.on("dragend", traceStretch);
+  state.pins.push(pin);
+  $("btn-clear-stretch").disabled = false;
+  if (isStart) { state.picking = 2; showHint(HINTS.end); return; }
+  state.picking = 0;
+  $("btn-pick").classList.remove("active");
+  showHint("");
+  traceStretch();
+});
+
+function clearStretch() {
+  for (const l of [...state.pins, state.stretchLayer, state.corridorLayer]) if (l) map.removeLayer(l);
+  Object.assign(state, { picking: 0, pins: [], stretch: null, stretchLayer: null, corridorLayer: null });
+  if (state.mode === "stretch") Object.assign(state, { bbox: null, selected: null, estimate: null });
+  $("btn-pick").classList.remove("active");
+  $("btn-clear-stretch").disabled = true;
+  $("s-area").classList.remove("done"); $("s-river").classList.remove("done");
+  $("res-warn").hidden = true;
+  showHint("");
+  updateRunButton();
+}
+
+async function traceStretch() {
+  if (state.pins.length < 2) return;
+  const seq = ++state.traceSeq;
+  const [a, b] = state.pins.map((p) => p.getLatLng());
+  $("area-info").textContent = "Tracing the river between your points…";
+  $("river-info").textContent = "";
+  Object.assign(state, { bbox: null, selected: null, stretch: null });
+  updateRunButton();
+  const res = await api("/api/trace", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start: [a.lng, a.lat], end: [b.lng, b.lat], corridor_m: +$("corridor").value }) }, true, true);
+  if (seq !== state.traceSeq) return;  // pins moved again while tracing
+  if (res.error) {
+    $("area-info").innerHTML = `<span class="err"></span> <a href="#" id="retry-trace">Retry</a>`;
+    $("area-info").firstChild.textContent = res.error;
+    $("retry-trace").onclick = (e) => { e.preventDefault(); traceStretch(); };
+    if (state.stretchLayer) map.removeLayer(state.stretchLayer);
+    if (state.corridorLayer) map.removeLayer(state.corridorLayer);
+    return;
+  }
+  state.stretch = res.stretch;
+  state.selected = res.river;
+  state.source = res.source;
+  if (state.stretchLayer) map.removeLayer(state.stretchLayer);
+  state.stretchLayer = L.geoJSON(res.stretch, { style: { color: getCss("--river-sel"), weight: 5, opacity: 0.95 } }).addTo(map);
+  // snap pins onto the traced line so they show where the stretch really starts and ends
+  const coords = res.stretch.coordinates;
+  state.pins[0].setLatLng([coords[0][1], coords[0][0]]);
+  state.pins[1].setLatLng([coords.at(-1)[1], coords.at(-1)[0]]);
+  applyCorridor(res);
+  map.fitBounds(state.corridorLayer.getBounds(), { padding: [30, 30] });
+  $("s-area").classList.add("done"); $("s-river").classList.add("done");
+  const src = res.source === "OSM" ? "OpenStreetMap (USGS NHD was unavailable)" : "USGS NHD";
+  $("river-info").innerHTML = `<b></b> <span></span>`;
+  $("river-info").children[0].textContent = res.river;
+  $("river-info").children[1].textContent = `· ${res.length_km} km stretch · Source: ${src}`;
+}
+
+function applyCorridor(res) {
+  state.bbox = res.bbox;
+  state.estimate = res.estimate;
+  if (state.corridorLayer) map.removeLayer(state.corridorLayer);
+  state.corridorLayer = L.geoJSON(res.corridor, { style: { color: getCss("--river-sel"), weight: 1.5, dashArray: "6 4",
+    fillOpacity: 0.06 }, interactive: false }).addTo(map);
+  state.stretchLayer && state.stretchLayer.bringToFront();
+  const e = res.estimate.by_res["10"];
+  $("area-info").textContent = `Corridor ${e.width_km} × ${e.height_km} km · UTM EPSG:${e.epsg}`;
+  updateResolution();
+}
+
+$("corridor").onchange = async () => {
+  if (!state.stretch) return;
+  const res = await api("/api/corridor", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stretch: state.stretch, corridor_m: +$("corridor").value }) });
+  if (res) applyCorridor(res);
+};
 map.on("mousedown", (e) => {
   if (!drawing) return;
   start = e.latlng;
@@ -203,8 +356,7 @@ function clearArea() {
   if (state.riverLayer) map.removeLayer(state.riverLayer);
   Object.assign(state, { bbox: null, rect: null, rivers: [], riverLayer: null, selected: null, estimate: null });
   $("btn-clear").disabled = true;
-  $("area-info").textContent = "Click “Draw area”, then drag a box around the stretch of river.";
-  $("river-info").textContent = "Rivers in your area will appear here and on the map.";
+  resetInfo();
   $("river-list").hidden = true;
   $("s-area").classList.remove("done"); $("s-river").classList.remove("done");
   updateRunButton();
@@ -314,7 +466,10 @@ function updateRunButton() {
 $("btn-run").onclick = async () => {
   $("run-msg").textContent = "";
   const res = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ bbox: state.bbox, river: state.selected, res: +$("res").value, cmap: $("cmap").value }) });
+    body: JSON.stringify(Object.assign({ river: state.selected, res: +$("res").value, cmap: $("cmap").value },
+      state.mode === "stretch"
+        ? { stretch: state.stretch, corridor_m: +$("corridor").value, clip: $("clip").checked }
+        : { bbox: state.bbox })) });
   if (!res) return;
   watchJob(res.id);
 };
@@ -361,12 +516,13 @@ function showResult(job, fit) {
     (job.centerline_source ? ` · ${job.centerline_source} centerline` : "");
   const f = job.files;
   const links = [["Styled GeoTIFF", f.viz], ["Styled PNG", f.viz_png], ["REM GeoTIFF (raw)", f.rem],
-                 ["DEM", f.dem], ["Centerline", "centerline.gpkg"]];
+                 ["DEM", f.dem], ["Centerline", f.centerline || "centerline.gpkg"],
+                 ["Stretch", f.stretch], ["Corridor", f.corridor]].filter(([, name]) => name);
   $("downloads").innerHTML = links.map(([t, name]) => `<a href="${base}${encodeURIComponent(name)}?dl=1">${t}</a>`).join("");
 }
 $("opacity").oninput = () => state.overlay && state.overlay.setOpacity(+$("opacity").value);
 $("show-lines").onchange = () => {
-  for (const layer of [state.riverLayer, state.rect]) {
+  for (const layer of [state.riverLayer, state.rect, state.stretchLayer, state.corridorLayer, ...state.pins]) {
     if (!layer) continue;
     $("show-lines").checked ? layer.addTo(map) : map.removeLayer(layer);
   }
@@ -398,7 +554,8 @@ async function loadRuns() {
 
 // ---------- utils
 function getCss(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
-async function api(url, opts = {}, quiet = false) {
+// quiet: don't show errors under Generate. returnError: resolve to {error} instead of null.
+async function api(url, opts = {}, quiet = false, returnError = false) {
   try {
     const r = await fetch(url, opts);
     const data = await r.json().catch(() => ({}));
@@ -406,9 +563,10 @@ async function api(url, opts = {}, quiet = false) {
     return data;
   } catch (e) {
     if (!quiet) { $("run-msg").innerHTML = `<span class="status-error"></span>`; $("run-msg").firstChild.textContent = e.message; }
-    return null;
+    return returnError ? { error: e.message } : null;
   }
 }
+resetInfo();
 loadRuns();
 </script>
 </body>

@@ -63,11 +63,58 @@ def rivers():
     return jsonify(pipeline.list_rivers(parse_bbox(request.args.get("bbox"))))
 
 
+def estimates(bbox: tuple) -> dict:
+    return {"by_res": {str(r): pipeline.estimate(bbox, r) for r in (1, 3, 10, 30)}, "max_megapixels": MAX_MEGAPIXELS}
+
+
+def parse_point(raw) -> tuple:
+    try:
+        lon, lat = (float(v) for v in raw)
+    except (TypeError, ValueError):
+        abort(400, "points must be [lon, lat]")
+    if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+        abort(400, "point out of range")
+    return (lon, lat)
+
+
+def parse_corridor(raw) -> float:
+    try:
+        corridor_m = float(raw)
+    except (TypeError, ValueError):
+        abort(400, "corridor_m must be a number")
+    if not 100 <= corridor_m <= 10000:
+        abort(400, "corridor_m must be between 100 and 10000")
+    return corridor_m
+
+
 @app.get("/api/estimate")
 def estimate():
-    bbox = parse_bbox(request.args.get("bbox"))
-    est = {str(r): pipeline.estimate(bbox, r) for r in (1, 3, 10, 30)}
-    return jsonify({"by_res": est, "max_megapixels": MAX_MEGAPIXELS})
+    return jsonify(estimates(parse_bbox(request.args.get("bbox"))))
+
+
+@app.post("/api/trace")
+def trace():
+    body = request.get_json(force=True)
+    start, end = parse_point(body.get("start")), parse_point(body.get("end"))
+    corridor_m = parse_corridor(body.get("corridor_m", 1500))
+    try:
+        result = pipeline.trace_stretch(start, end, body.get("river") or None)
+    except ValueError as exc:
+        abort(400, str(exc))
+    poly, bbox = pipeline.corridor(result["stretch"], corridor_m)
+    result.update(corridor=poly, bbox=bbox, estimate=estimates(bbox))
+    return jsonify(result)
+
+
+@app.post("/api/corridor")
+def corridor():
+    """Recompute corridor + estimates for an already-traced stretch (e.g. when the width changes)."""
+    body = request.get_json(force=True)
+    stretch = body.get("stretch") or {}
+    if stretch.get("type") != "LineString" or len(stretch.get("coordinates", [])) < 2:
+        abort(400, "stretch must be a GeoJSON LineString")
+    poly, bbox = pipeline.corridor(stretch, parse_corridor(body.get("corridor_m", 1500)))
+    return jsonify({"corridor": poly, "bbox": bbox, "estimate": estimates(bbox)})
 
 
 @app.get("/api/jobs")
@@ -82,14 +129,21 @@ def list_jobs():
 @app.post("/api/jobs")
 def create_job():
     body = request.get_json(force=True)
-    bbox = parse_bbox(",".join(str(v) for v in body.get("bbox", [])))
     river = str(body.get("river", "")).strip()
     res = float(body.get("res", 10))
     cmap = str(body.get("cmap", "mako"))
+    stretch = body.get("stretch")
     if not river:
         abort(400, "Pick a river first.")
     if res not in (1, 3, 10, 30):
         abort(400, "res must be 1, 3, 10 or 30")
+    if stretch:
+        if stretch.get("type") != "LineString" or len(stretch.get("coordinates", [])) < 2:
+            abort(400, "stretch must be a GeoJSON LineString")
+        corridor_m = parse_corridor(body.get("corridor_m", 1500))
+        _, bbox = pipeline.corridor(stretch, corridor_m)
+    else:
+        bbox = parse_bbox(",".join(str(v) for v in body.get("bbox", [])))
     if any(p.poll() is None for p in procs.values()):
         abort(409, "A REM is already running. Wait for it to finish.")
     mp = pipeline.estimate(bbox, res)["megapixels"]
@@ -100,11 +154,19 @@ def create_job():
     job_id = f"{datetime.now():%Y%m%d-%H%M%S}_{slug}_{res:g}m"
     out = os.path.join(pipeline.RUNS_DIR, job_id)
     os.makedirs(out, exist_ok=True)
+    args = [sys.executable, "-u", os.path.join(HERE, "pipeline.py"), "run", "--river", river,
+            "--res", str(res), "--cmap", cmap, "--out", out]
+    if stretch:
+        stretch_path = os.path.join(out, "stretch_input.geojson")
+        with open(stretch_path, "w") as f:
+            json.dump({"type": "Feature", "properties": {"river": river}, "geometry": stretch}, f)
+        args += ["--stretch", stretch_path, "--corridor", str(corridor_m)]
+        if not body.get("clip", True):
+            args.append("--no-clip")
+    else:
+        args += ["--bbox", *map(str, bbox)]
     log = open(os.path.join(out, "run.log"), "w")
-    procs[job_id] = subprocess.Popen(
-        [sys.executable, "-u", os.path.join(HERE, "pipeline.py"), "run", "--bbox", *map(str, bbox),
-         "--river", river, "--res", str(res), "--cmap", cmap, "--out", out],
-        stdout=log, stderr=subprocess.STDOUT, cwd=out)
+    procs[job_id] = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=out)
     return jsonify({"id": job_id}), 202
 
 
@@ -129,6 +191,11 @@ def run_file(job_id, filename):
 @app.errorhandler(409)
 def err(e):
     return jsonify({"error": e.description}), e.code
+
+
+@app.errorhandler(pipeline.ServiceUnavailable)
+def service_down(e):
+    return jsonify({"error": str(e)}), 503
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@ Each run writes to its own folder with a job.json manifest the app reads.
 Usage (run inside the rem_env conda env):
     pipeline.py rivers --bbox W S E N
     pipeline.py run --bbox W S E N --river "Arkansas River" [--res 10] [--cmap mako] [--out DIR]
+    pipeline.py trace --start LON LAT --end LON LAT
+    pipeline.py run --start LON LAT --end LON LAT [--corridor 1500] [--no-clip] [--res 10]
 """
 import argparse
 import hashlib
@@ -24,10 +26,10 @@ import geopandas as gpd
 import rasterio
 from rasterio.merge import merge
 from rasterio.warp import transform_bounds
-from shapely.geometry import LineString
+from shapely.geometry import LineString, box
 
 NHD_FLOWLINES = "https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer/3/query"
-OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"]
+OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.openstreetmap.fr/api/interpreter"]
 DEM_3DEP = "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage"
 USER_AGENT = "RiverREM-Studio/1.0 (ridgelinemaps)"
 TILE_PX = 4000  # 3DEP caps requests at 8000 px; smaller tiles fail less often
@@ -35,6 +37,10 @@ NODATA = -9999.0
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 RUNS_DIR = os.path.join(REPO_ROOT, "river_rem_runs")
 CACHE_DIR = os.path.join(REPO_ROOT, ".osm_cache", "rem_app")
+
+
+class ServiceUnavailable(RuntimeError):
+    """Every upstream data source failed; worth retrying later."""
 
 
 def log(msg: str) -> None:
@@ -131,27 +137,49 @@ def _osm_lines(bbox: tuple) -> list:
             for el in data.get("elements", []) if len(el.get("geometry", [])) >= 2]
 
 
+def _cached_lines(bbox: tuple) -> tuple[list, str] | None:
+    """Features from any cached query whose bbox contains this one (NHD preferred over OSM)."""
+    w, s, e, n = bbox
+    hits = []
+    for name in os.listdir(CACHE_DIR):
+        try:
+            with open(os.path.join(CACHE_DIR, name)) as f:
+                cached = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        cw, cs, ce, cn = cached.get("bbox", (0, 0, 0, 0))
+        if cw <= w and cs <= s and ce >= e and cn >= n:
+            hits.append(cached)
+    if not hits:
+        return None
+    best = min(hits, key=lambda c: (c["source"] != "NHD", (c["bbox"][2] - c["bbox"][0]) * (c["bbox"][3] - c["bbox"][1])))
+    return best["features"], best["source"]
+
+
 def named_lines(bbox: tuple) -> tuple[gpd.GeoDataFrame, str]:
-    """Named river lines in bbox from NHD, falling back to OSM. Cached per bbox. Returns (gdf, source)."""
+    """Named river lines intersecting bbox from NHD, falling back to OSM. Cached. Returns (gdf, source)."""
     os.makedirs(CACHE_DIR, exist_ok=True)
-    key = hashlib.sha1(",".join(f"{v:.5f}" for v in bbox).encode()).hexdigest()[:16]
-    path = os.path.join(CACHE_DIR, f"{key}.json")
-    if os.path.exists(path):
-        with open(path) as f:
-            cached = json.load(f)
-        feats, source = cached["features"], cached["source"]
+    hit = _cached_lines(bbox)
+    if hit:
+        feats, source = hit
     else:
         try:
             log("Querying USGS NHD flowlines")
             feats, source = _nhd_lines(bbox), "NHD"
         except Exception as exc:
             log(f"NHD unavailable ({exc}); falling back to OpenStreetMap")
-            feats, source = _osm_lines(bbox), "OSM"
-        with open(path, "w") as f:
-            json.dump({"source": source, "features": feats}, f)
+            try:
+                feats, source = _osm_lines(bbox), "OSM"
+            except Exception as osm_exc:
+                raise ServiceUnavailable("Couldn't load river lines: USGS NHD and OpenStreetMap are both "
+                                         "unavailable right now. Try again in a minute.") from osm_exc
+        key = hashlib.sha1(",".join(f"{v:.5f}" for v in bbox).encode()).hexdigest()[:16]
+        with open(os.path.join(CACHE_DIR, f"{key}.json"), "w") as f:
+            json.dump({"bbox": list(bbox), "source": source, "features": feats}, f)
     if not feats:
         return gpd.GeoDataFrame({"gnis_name": []}, geometry=[], crs="EPSG:4326"), source
-    return gpd.GeoDataFrame.from_features(feats, crs="EPSG:4326")[["gnis_name", "geometry"]], source
+    gdf = gpd.GeoDataFrame.from_features(feats, crs="EPSG:4326")[["gnis_name", "geometry"]]
+    return gdf[gdf.intersects(box(*bbox))], source
 
 
 def list_rivers(bbox: tuple) -> dict:
@@ -171,6 +199,110 @@ def list_rivers(bbox: tuple) -> dict:
     rivers = [{"name": r.gnis_name, "length_km": r.length_km} for r in grouped.itertuples()]
     geojson = json.loads(grouped[["gnis_name", "length_km", "geometry"]].to_json())
     return {"rivers": rivers, "source": source, "geojson": geojson}
+
+
+# ---------------------------------------------------------------- stretch (start/end points)
+
+SNAP_M = 500     # clicks farther than this from any named river are rejected
+BRIDGE_M = 75    # join line ends closer than this (NHD/OSM gaps at confluences, bridges)
+
+
+def _river_graph(lines_utm: gpd.GeoSeries):
+    """Graph of line vertices (UTM metres) weighted by segment length, with small gaps bridged."""
+    import networkx as nx
+    from scipy.spatial import cKDTree
+
+    g = nx.Graph()
+    for geom in lines_utm.explode(index_parts=False):
+        pts = [(round(x, 1), round(y, 1)) for x, y in geom.coords]
+        for a, b in zip(pts, pts[1:]):
+            if a != b:
+                g.add_edge(a, b, weight=math.dist(a, b))
+    ends = [n for n, d in g.degree() if d == 1]
+    if len(ends) > 1:
+        for i, j in cKDTree(ends).query_pairs(BRIDGE_M):
+            g.add_edge(ends[i], ends[j], weight=math.dist(ends[i], ends[j]))
+    return g
+
+
+def trace_stretch(start: tuple, end: tuple, river: str | None = None) -> dict:
+    """Follow the named river between two clicked (lon, lat) points.
+
+    Picks the river closest to both clicks (or `river` if given) and returns the path along it.
+    """
+    import networkx as nx
+    from pyproj import Transformer
+    from scipy.spatial import cKDTree
+    from shapely.geometry import Point
+    from shapely.ops import transform as shp_transform
+
+    (x1, y1), (x2, y2) = start, end
+    # generous padding so pin nudges and wider corridors reuse the cached lines
+    pad = max(0.04, 0.25 * max(abs(x2 - x1), abs(y2 - y1)))
+    qbbox = (round(min(x1, x2) - pad, 3), round(min(y1, y2) - pad, 3),
+             round(max(x1, x2) + pad, 3), round(max(y1, y2) + pad, 3))
+    lines, source = named_lines(qbbox)
+    if river:
+        lines = lines[lines["gnis_name"] == river]
+    if lines.empty:
+        raise ValueError("No named rivers near those points.")
+
+    epsg = utm_epsg((x1 + x2) / 2, (y1 + y2) / 2)
+    to_utm = Transformer.from_crs(4326, epsg, always_xy=True)
+    to_ll = Transformer.from_crs(epsg, 4326, always_xy=True)
+    p1, p2 = Point(to_utm.transform(x1, y1)), Point(to_utm.transform(x2, y2))
+    lines_utm = lines.to_crs(epsg)
+
+    by_name = lines_utm.groupby("gnis_name").geometry
+    dists = {name: (geoms.distance(p1).min(), geoms.distance(p2).min()) for name, geoms in by_name}
+    name, (d1, d2) = min(dists.items(), key=lambda kv: max(kv[1]))
+    if max(d1, d2) > SNAP_M:
+        near_a = min(dists.items(), key=lambda kv: kv[1][0])
+        near_b = min(dists.items(), key=lambda kv: kv[1][1])
+        far = [f"{label} is {d:.0f} m from the nearest named river ({river_name})"
+               for label, (river_name, d) in (("A", (near_a[0], near_a[1][0])), ("B", (near_b[0], near_b[1][1])))
+               if d > SNAP_M]
+        if far:
+            raise ValueError(f"Place both pins within {SNAP_M} m of a river: " + "; ".join(far) + ".")
+        raise ValueError(f"The pins are on different rivers (A: {near_a[0]}, B: {near_b[0]}). "
+                         "Put both on the same river.")
+
+    g = _river_graph(lines_utm[lines_utm["gnis_name"] == name].geometry)
+    nodes = list(g.nodes)
+    tree = cKDTree(nodes)
+    n1, n2 = nodes[tree.query(p1.coords[0])[1]], nodes[tree.query(p2.coords[0])[1]]
+    try:
+        path = nx.shortest_path(g, n1, n2, weight="weight")
+    except nx.NetworkXNoPath:
+        raise ValueError(f"The {source} lines for {name} have a gap between your points. "
+                         "Move the points closer together or use box mode.")
+    if len(path) < 2:
+        raise ValueError("Start and end snap to the same spot. Pick points farther apart.")
+
+    stretch_utm = LineString(path)
+    stretch = shp_transform(to_ll.transform, stretch_utm)
+    return {"river": name, "source": source, "length_km": round(stretch_utm.length / 1000, 2),
+            "snap_m": [round(d1), round(d2)], "stretch": stretch.__geo_interface__}
+
+
+def corridor(stretch: dict, corridor_m: float) -> tuple[dict, tuple]:
+    """Buffer a stretch (GeoJSON LineString, EPSG:4326) by corridor_m each side.
+
+    Returns (polygon GeoJSON in EPSG:4326, bbox W S E N covering it).
+    """
+    from pyproj import Transformer
+    from shapely.geometry import shape
+    from shapely.ops import transform as shp_transform
+
+    line = shape(stretch)
+    c = line.centroid
+    epsg = utm_epsg(c.x, c.y)
+    to_utm = Transformer.from_crs(4326, epsg, always_xy=True)
+    to_ll = Transformer.from_crs(epsg, 4326, always_xy=True)
+    poly_utm = shp_transform(to_utm.transform, line).buffer(corridor_m, quad_segs=16)
+    bbox = transform_bounds(f"EPSG:{epsg}", "EPSG:4326", *poly_utm.bounds, densify_pts=21)
+    poly = shp_transform(to_ll.transform, poly_utm.simplify(1))
+    return poly.__geo_interface__, tuple(round(v, 6) for v in bbox)
 
 
 # ---------------------------------------------------------------- 3DEP
@@ -251,15 +383,42 @@ def make_preview(viz_tif: str, out_png: str, max_px: int = 2048) -> list:
     return [[s, w], [n, e]]
 
 
-def run(bbox: tuple, river: str, res_m: float, cmap: str, out_dir: str | None = None) -> dict:
+def clip_to_polygon(src_tif: str, poly_geojson: str, out_tif: str) -> str:
+    """Mask a raster to a polygon. RGB rasters get an alpha band; single-band keep their nodata."""
+    from osgeo import gdal
+    gdal.UseExceptions()
+    src = gdal.Open(src_tif)
+    rgb = src.RasterCount >= 3
+    gdal.Warp(out_tif, src, cutlineDSName=poly_geojson, cropToCutline=True, dstAlpha=rgb,
+              dstNodata=None if rgb else src.GetRasterBand(1).GetNoDataValue(),
+              creationOptions=["COMPRESS=DEFLATE", "TILED=YES"])
+    src = None
+    return out_tif
+
+
+def run(bbox: tuple | None, river: str, res_m: float, cmap: str, out_dir: str | None = None,
+        stretch: dict | None = None, corridor_m: float = 1500, clip: bool = True) -> dict:
+    """Generate a REM for `river` over bbox, or over a corridor around `stretch` (GeoJSON, EPSG:4326)."""
     from riverrem.REMMaker import REMMaker
 
+    corridor_poly = None
+    if stretch:
+        corridor_poly, bbox = corridor(stretch, corridor_m)
     slug = "".join(c if c.isalnum() else "-" for c in river.lower()).strip("-")
     out_dir = out_dir or os.path.join(RUNS_DIR, f"{datetime.now():%Y%m%d-%H%M%S}_{slug}_{res_m:g}m")
     os.makedirs(out_dir, exist_ok=True)
     manifest_path = os.path.join(out_dir, "job.json")
     manifest = {"bbox": list(bbox), "river": river, "res_m": res_m, "cmap": cmap,
+                "mode": "stretch" if stretch else "box",
                 "status": "running", "started": datetime.now().isoformat(timespec="seconds")}
+    if stretch:
+        manifest.update(corridor_m=corridor_m, clip=clip)
+        with open(os.path.join(out_dir, "stretch.geojson"), "w") as f:
+            json.dump({"type": "Feature", "properties": {"river": river}, "geometry": stretch}, f)
+        corridor_path = os.path.join(out_dir, "corridor.geojson")
+        with open(corridor_path, "w") as f:
+            json.dump({"type": "FeatureCollection", "features": [
+                {"type": "Feature", "properties": {}, "geometry": corridor_poly}]}, f)
 
     def save(**updates):
         manifest.update(updates)
@@ -270,7 +429,8 @@ def run(bbox: tuple, river: str, res_m: float, cmap: str, out_dir: str | None = 
     try:
         log(f"Getting centerline for {river!r}")
         lines, source = named_lines(bbox)
-        lines = lines[lines["gnis_name"] == river]
+        lines = lines[lines["gnis_name"] == river].clip(bbox)
+        lines = lines[~lines.geometry.is_empty]
         if lines.empty:
             raise RuntimeError(f"No {source} river lines named {river!r} in this area.")
         epsg = bbox_epsg(bbox)
@@ -290,14 +450,26 @@ def run(bbox: tuple, river: str, res_m: float, cmap: str, out_dir: str | None = 
         save(step="viz")
         viz_tif = rem.make_rem_viz(cmap=cmap, make_png=True)
 
+        viz_png = viz_tif.replace(".tif", ".png")
+        if stretch and clip:
+            log(f"Clipping to {corridor_m / 1000:g} km corridor")
+            rem_tif = clip_to_polygon(rem_tif, corridor_path, rem_tif.replace(".tif", "_corridor.tif"))
+            viz_tif = clip_to_polygon(viz_tif, corridor_path, viz_tif.replace(".tif", "_corridor.tif"))
+            from osgeo import gdal
+            viz_png = viz_tif.replace(".tif", ".png")
+            gdal.Translate(viz_png, viz_tif, format="PNG")
+
         save(step="preview")
         preview = os.path.join(out_dir, "preview_4326.png")
         bounds = make_preview(viz_tif, preview)
         shutil.rmtree(os.path.join(out_dir, ".cache"), ignore_errors=True)
+        files = {"rem": os.path.basename(rem_tif), "viz": os.path.basename(viz_tif),
+                 "viz_png": os.path.basename(viz_png), "dem": os.path.basename(dem),
+                 "centerline": "centerline.gpkg", "preview": os.path.basename(preview)}
+        if stretch:
+            files.update(stretch="stretch.geojson", corridor="corridor.geojson")
         save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"),
-             bounds=bounds, files={"rem": os.path.basename(rem_tif), "viz": os.path.basename(viz_tif),
-                                   "viz_png": os.path.basename(viz_tif).replace(".tif", ".png"),
-                                   "dem": os.path.basename(dem), "preview": os.path.basename(preview)})
+             bounds=bounds, files=files)
         log(f"Done: {out_dir}")
     except Exception as exc:
         save(status="error", error=str(exc))
@@ -311,22 +483,50 @@ def main() -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("rivers", help="list named rivers in a bbox")
     r.add_argument("--bbox", nargs=4, type=float, required=True, metavar=("W", "S", "E", "N"))
-    g = sub.add_parser("run", help="generate a REM")
-    g.add_argument("--bbox", nargs=4, type=float, required=True, metavar=("W", "S", "E", "N"))
-    g.add_argument("--river", required=True, help="NHD GNIS name, e.g. 'Arkansas River'")
+    t = sub.add_parser("trace", help="trace the river between two points")
+    t.add_argument("--start", nargs=2, type=float, required=True, metavar=("LON", "LAT"))
+    t.add_argument("--end", nargs=2, type=float, required=True, metavar=("LON", "LAT"))
+    t.add_argument("--river", default=None)
+    g = sub.add_parser("run", help="generate a REM for a bbox, or for a stretch between two points")
+    g.add_argument("--bbox", nargs=4, type=float, metavar=("W", "S", "E", "N"))
+    g.add_argument("--start", nargs=2, type=float, metavar=("LON", "LAT"))
+    g.add_argument("--end", nargs=2, type=float, metavar=("LON", "LAT"))
+    g.add_argument("--stretch", help="GeoJSON file with the stretch LineString (from the app)")
+    g.add_argument("--river", help="river name; required with --bbox, optional with --start/--end")
+    g.add_argument("--corridor", type=float, default=1500, help="stretch mode: metres each side of the river")
+    g.add_argument("--no-clip", action="store_true", help="stretch mode: keep the full rectangle")
     g.add_argument("--res", type=float, default=10, help="DEM resolution in metres (1, 3, 10, 30)")
     g.add_argument("--cmap", default="mako")
     g.add_argument("--out", default=None)
     args = p.parse_args()
 
-    bbox = tuple(args.bbox)
     if args.cmd == "rivers":
-        result = list_rivers(bbox)
+        result = list_rivers(tuple(args.bbox))
         print(f"Source: {result['source']}")
         for rv in result["rivers"]:
             print(f"{rv['length_km']:8.2f} km  {rv['name']}")
         return 0
-    run(bbox, args.river, args.res, args.cmap, args.out)
+    if args.cmd == "trace":
+        tr = trace_stretch(tuple(args.start), tuple(args.end), args.river)
+        print(f"{tr['river']} ({tr['source']}): {tr['length_km']} km, snapped {tr['snap_m'][0]} m / {tr['snap_m'][1]} m")
+        return 0
+
+    stretch, river = None, args.river
+    if args.stretch:
+        with open(args.stretch) as f:
+            gj = json.load(f)
+        stretch = gj.get("geometry", gj)
+        river = river or gj.get("properties", {}).get("river")
+    elif args.start and args.end:
+        tr = trace_stretch(tuple(args.start), tuple(args.end), river)
+        stretch, river = tr["stretch"], tr["river"]
+        log(f"Stretch: {river}, {tr['length_km']} km")
+    elif not args.bbox:
+        p.error("run needs --bbox, --start/--end, or --stretch")
+    if not river:
+        p.error("--river is required")
+    run(tuple(args.bbox) if args.bbox else None, river, args.res, args.cmap, args.out,
+        stretch=stretch, corridor_m=args.corridor, clip=not args.no_clip)
     return 0
 
 
