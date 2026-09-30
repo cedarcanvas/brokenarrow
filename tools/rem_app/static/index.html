@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>River REM Studio</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f4ef; --panel: #ffffff; --ink: #1d2a2f; --muted: #6b7a80; --line: #e2ded5;
+    --accent: #1f6f8b; --accent-ink: #ffffff; --river: #7b3fe4; --river-sel: #e4572e;
+    --ok: #2e7d4f; --err: #b3261e; --code: #f1efe9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14191b; --panel: #1c2326; --ink: #e6ecee; --muted: #93a3a9; --line: #2d373b;
+            --accent: #4fb0d0; --accent-ink: #0d1416; --river: #a98bff; --river-sel: #ff7a50;
+            --ok: #5cc98a; --err: #ff8a80; --code: #11171a; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         display: grid; grid-template-columns: 360px 1fr; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; height: 100vh; }
+  header { padding: 18px 20px 10px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: .2px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
+  section { padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  section h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+               display: flex; align-items: center; gap: 8px; }
+  .num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+         background: var(--line); color: var(--ink); font-size: 11px; }
+  .done .num { background: var(--accent); color: var(--accent-ink); }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+           padding: 7px 12px; border-radius: 6px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.active { outline: 2px solid var(--accent); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  label { display: block; font-size: 12.5px; color: var(--muted); margin: 8px 0 3px; }
+  select { width: 100%; font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--ink); }
+  ul.list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 220px; overflow-y: auto;
+            border: 1px solid var(--line); border-radius: 6px; }
+  ul.list li { padding: 6px 10px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex;
+               justify-content: space-between; gap: 8px; }
+  ul.list li:last-child { border-bottom: 0; }
+  ul.list li:hover { background: var(--bg); }
+  ul.list li.sel { background: var(--accent); color: var(--accent-ink); }
+  ul.list li .km { color: inherit; opacity: .7; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .warn { color: var(--err); font-size: 12.5px; margin-top: 6px; }
+  .steps { display: flex; gap: 4px; margin: 8px 0; }
+  .steps span { flex: 1; height: 5px; border-radius: 3px; background: var(--line); }
+  .steps span.on { background: var(--accent); }
+  .steps span.run { background: var(--accent); animation: pulse 1s infinite alternate; }
+  @keyframes pulse { from { opacity: .35 } to { opacity: 1 } }
+  pre { background: var(--code); border-radius: 6px; padding: 8px; font-size: 11px; max-height: 180px; overflow: auto;
+        white-space: pre-wrap; word-break: break-all; margin: 6px 0 0; }
+  .status-done { color: var(--ok); } .status-error { color: var(--err); }
+  .dl a { display: inline-block; margin: 4px 10px 0 0; color: var(--accent); font-size: 12.5px; }
+  input[type=range] { width: 100%; }
+  #map { height: 100vh; }
+  #map.drawing { cursor: crosshair; }
+  .hint { position: absolute; z-index: 1000; left: 50%; top: 12px; transform: translateX(-50%); background: var(--panel);
+          color: var(--ink); padding: 6px 12px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.2); font-size: 13px; display: none; }
+  main { position: relative; }
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 55vh auto; }
+    main { order: -1; } #map { height: 55vh; } aside { height: auto; border-right: 0; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <header>
+    <h1>River REM Studio</h1>
+    <p>Draw an area, pick a river, and generate a relative elevation model from USGS 3DEP and NHD.</p>
+  </header>
+
+  <section id="s-area">
+    <h2><span class="num">1</span>Area</h2>
+    <div class="row">
+      <button id="btn-draw" class="primary">Draw area</button>
+      <button id="btn-clear" disabled>Clear</button>
+    </div>
+    <div id="area-info" class="muted" style="margin-top:8px">Click “Draw area”, then drag a box around the stretch of river.</div>
+  </section>
+
+  <section id="s-river">
+    <h2><span class="num">2</span>River</h2>
+    <div id="river-info" class="muted">Rivers in your area will appear here and on the map.</div>
+    <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="show-ditches"> Show ditches &amp; canals</label>
+    <ul id="river-list" class="list" hidden></ul>
+  </section>
+
+  <section id="s-settings">
+    <h2><span class="num">3</span>Settings</h2>
+    <label for="res">DEM resolution</label>
+    <select id="res">
+      <option value="1">1 m (lidar)</option>
+      <option value="3">3 m</option>
+      <option value="10" selected>10 m</option>
+      <option value="30">30 m</option>
+    </select>
+    <div id="res-warn" class="warn" hidden></div>
+    <label for="cmap">Color ramp</label>
+    <select id="cmap">
+      <option>mako</option><option>mako_r</option><option>topo</option><option>cmo.deep</option>
+      <option>cmo.tempo</option><option>cmo.ice</option><option>viridis</option><option>Spectral_r</option>
+      <option>rocket</option><option>Blues_r</option>
+    </select>
+  </section>
+
+  <section id="s-run">
+    <h2><span class="num">4</span>Generate</h2>
+    <button id="btn-run" class="primary" disabled>Generate REM</button>
+    <div id="run-msg" class="muted" style="margin-top:8px"></div>
+    <div id="progress" hidden>
+      <div class="steps" id="steps"></div>
+      <div id="step-label" class="muted"></div>
+      <pre id="log"></pre>
+    </div>
+  </section>
+
+  <section id="s-result" hidden>
+    <h2>Result</h2>
+    <div id="result-title"></div>
+    <label for="opacity">Overlay opacity</label>
+    <input type="range" id="opacity" min="0" max="1" step="0.05" value="0.9">
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="show-lines" checked> Show river lines &amp; area outline</label>
+    <div class="dl" id="downloads"></div>
+  </section>
+
+  <section>
+    <h2>Past runs</h2>
+    <ul id="runs" class="list"><li class="muted">Loading…</li></ul>
+  </section>
+</aside>
+
+<main>
+  <div id="map"></div>
+  <div class="hint" id="hint">Drag to draw the area · Esc to cancel</div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STEPS = [["centerline", "Fetching NHD centerline"], ["dem", "Downloading 3DEP elevation"],
+               ["rem", "Interpolating river surface"], ["viz", "Shading and coloring"],
+               ["preview", "Building map preview"], ["done", "Done"]];
+const DITCH = /ditch|canal|lateral|drain|flume/i;
+
+const state = { bbox: null, rect: null, rivers: [], riverLayer: null, selected: null,
+                estimate: null, jobId: null, overlay: null, poll: null };
+
+// ---------- map
+const map = L.map("map", { zoomControl: true }).setView([39.0, -106.2], 9);
+const usgs = (name) => L.tileLayer(`https://basemap.nationalmap.gov/arcgis/rest/services/${name}/MapServer/tile/{z}/{y}/{x}`,
+  { maxZoom: 16, attribution: "USGS The National Map" });
+const bases = {
+  "USGS Topo": usgs("USGSTopo"),
+  "USGS Imagery": usgs("USGSImageryOnly"),
+  "USGS Shaded Relief": usgs("USGSShadedReliefOnly"),
+  "OpenTopoMap": L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    { maxZoom: 17, attribution: "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)" }),
+};
+bases["USGS Topo"].addTo(map);
+L.control.layers(bases, null, { position: "topright" }).addTo(map);
+L.control.scale({ imperial: true }).addTo(map);
+
+// ---------- rectangle drawing
+let drawing = false, start = null;
+function setDrawing(on) {
+  drawing = on;
+  $("btn-draw").classList.toggle("active", on);
+  $("map").classList.toggle("drawing", on);
+  $("hint").style.display = on ? "block" : "none";
+  on ? map.dragging.disable() : map.dragging.enable();
+}
+$("btn-draw").onclick = () => setDrawing(!drawing);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") setDrawing(false); });
+map.on("mousedown", (e) => {
+  if (!drawing) return;
+  start = e.latlng;
+  if (state.rect) map.removeLayer(state.rect);
+  state.rect = L.rectangle([start, start], { color: "#e4572e", weight: 2, fillOpacity: 0.05, dashArray: "6 4" }).addTo(map);
+});
+map.on("mousemove", (e) => { if (drawing && start) state.rect.setBounds([start, e.latlng]); });
+map.on("mouseup", (e) => {
+  if (!drawing || !start) return;
+  const b = L.latLngBounds(start, e.latlng);
+  start = null;
+  setDrawing(false);
+  if (Math.abs(b.getEast() - b.getWest()) < 0.002 || Math.abs(b.getNorth() - b.getSouth()) < 0.002) {
+    map.removeLayer(state.rect); state.rect = null; return;
+  }
+  setArea(b);
+});
+$("btn-clear").onclick = clearArea;
+
+function clearArea() {
+  if (state.rect) map.removeLayer(state.rect);
+  if (state.riverLayer) map.removeLayer(state.riverLayer);
+  Object.assign(state, { bbox: null, rect: null, rivers: [], riverLayer: null, selected: null, estimate: null });
+  $("btn-clear").disabled = true;
+  $("area-info").textContent = "Click “Draw area”, then drag a box around the stretch of river.";
+  $("river-info").textContent = "Rivers in your area will appear here and on the map.";
+  $("river-list").hidden = true;
+  $("s-area").classList.remove("done"); $("s-river").classList.remove("done");
+  updateRunButton();
+}
+
+async function setArea(bounds) {
+  state.bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].map((v) => +v.toFixed(5));
+  state.selected = null;
+  $("btn-clear").disabled = false;
+  $("s-area").classList.add("done");
+  $("area-info").textContent = "Measuring area…";
+  $("river-info").textContent = "Finding rivers (NHD)…";
+  $("river-list").hidden = true;
+  if (state.riverLayer) { map.removeLayer(state.riverLayer); state.riverLayer = null; }
+  updateRunButton();
+  const bbox = state.bbox, q = `bbox=${bbox.join(",")}`;
+  api(`/api/estimate?${q}`).then((est) => {
+    if (!est || state.bbox !== bbox) return;
+    state.estimate = est;
+    const e = est.by_res["10"];
+    $("area-info").textContent = `${e.width_km} × ${e.height_km} km · UTM EPSG:${e.epsg}`;
+    updateResolution();
+  });
+  const riv = await api(`/api/rivers?${q}`);
+  if (state.bbox !== bbox) return;  // user redrew while NHD was loading
+  if (riv) { state.rivers = riv.rivers; state.source = riv.source; drawRivers(riv.geojson); }
+  else $("river-info").textContent = "Couldn't reach the USGS NHD service. Redraw the area to retry.";
+}
+
+// ---------- rivers
+function riverStyle(f) {
+  const sel = f.properties.gnis_name === state.selected;
+  return { color: sel ? getCss("--river-sel") : getCss("--river"), weight: sel ? 5 : 2.5, opacity: sel ? 1 : 0.85 };
+}
+function drawRivers(geojson) {
+  if (state.riverLayer) map.removeLayer(state.riverLayer);
+  const showDitch = $("show-ditches").checked;
+  state.riverLayer = L.geoJSON(geojson, {
+    filter: (f) => showDitch || !DITCH.test(f.properties.gnis_name),
+    style: riverStyle,
+    onEachFeature: (f, layer) => {
+      layer.bindTooltip(`${f.properties.gnis_name} · ${f.properties.length_km} km`, { sticky: true });
+      layer.on("click", () => selectRiver(f.properties.gnis_name));
+    },
+  }).addTo(map);
+  state.riverGeojson = geojson;
+  renderRiverList();
+}
+function renderRiverList() {
+  const showDitch = $("show-ditches").checked;
+  const rivers = state.rivers.filter((r) => showDitch || !DITCH.test(r.name));
+  const ul = $("river-list");
+  ul.innerHTML = "";
+  if (!rivers.length) {
+    $("river-info").textContent = state.bbox ? "No named rivers found in this area. Try a larger box." : "";
+    ul.hidden = true; return;
+  }
+  const src = state.source === "OSM" ? "OpenStreetMap (USGS NHD was unavailable)" : "USGS NHD";
+  $("river-info").textContent = (state.selected ? `Selected: ${state.selected}` : "Click a river on the map or in the list.")
+    + ` · Source: ${src}`;
+  for (const r of rivers) {
+    const li = document.createElement("li");
+    li.className = r.name === state.selected ? "sel" : "";
+    li.innerHTML = `<span></span><span class="km">${r.length_km} km</span>`;
+    li.firstChild.textContent = r.name;
+    li.onclick = () => selectRiver(r.name);
+    ul.appendChild(li);
+  }
+  ul.hidden = false;
+}
+$("show-ditches").onchange = () => state.riverGeojson && drawRivers(state.riverGeojson);
+function selectRiver(name) {
+  state.selected = name;
+  state.riverLayer && state.riverLayer.setStyle(riverStyle);
+  state.riverLayer && state.riverLayer.eachLayer((l) => l.feature.properties.gnis_name === name && l.bringToFront());
+  $("s-river").classList.add("done");
+  renderRiverList();
+  updateRunButton();
+}
+
+// ---------- settings
+function updateResolution() {
+  const warn = $("res-warn");
+  if (!state.estimate) { warn.hidden = true; return; }
+  const { by_res, max_megapixels } = state.estimate;
+  for (const opt of $("res").options) {
+    const e = by_res[opt.value];
+    opt.textContent = `${opt.value} m${opt.value === "1" ? " (lidar)" : ""} — ${e.megapixels} MP`;
+    opt.disabled = e.megapixels > max_megapixels;
+  }
+  if ($("res").selectedOptions[0].disabled) {
+    $("res").value = [...$("res").options].find((o) => !o.disabled)?.value || "30";
+  }
+  const mp = by_res[$("res").value].megapixels;
+  warn.hidden = mp < 60;
+  warn.textContent = mp >= 60 ? `${mp} MP is a big run; expect several minutes and a few GB of RAM.` : "";
+  updateRunButton();
+}
+$("res").onchange = updateResolution;
+
+function updateRunButton() {
+  const running = !!state.poll;
+  $("btn-run").disabled = running || !state.bbox || !state.selected;
+}
+
+// ---------- jobs
+$("btn-run").onclick = async () => {
+  $("run-msg").textContent = "";
+  const res = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bbox: state.bbox, river: state.selected, res: +$("res").value, cmap: $("cmap").value }) });
+  if (!res) return;
+  watchJob(res.id);
+};
+
+function renderSteps(step, status) {
+  const idx = STEPS.findIndex(([k]) => k === step);
+  $("steps").innerHTML = STEPS.slice(0, -1).map((_, i) =>
+    `<span class="${status === "done" || i < idx ? "on" : i === idx && status === "running" ? "run" : ""}"></span>`).join("");
+  $("step-label").textContent = status === "error" ? "" : (STEPS[idx] || STEPS[0])[1] + (status === "running" ? "…" : "");
+}
+
+function watchJob(id) {
+  state.jobId = id;
+  $("progress").hidden = false;
+  clearInterval(state.poll);
+  const tick = async () => {
+    const job = await api(`/api/jobs/${encodeURIComponent(id)}`, {}, true);
+    if (!job) return;
+    renderSteps(job.step || "centerline", job.status);
+    $("log").textContent = (job.log || []).join("\n");
+    $("log").scrollTop = $("log").scrollHeight;
+    if (job.status !== "running") {
+      clearInterval(state.poll); state.poll = null; updateRunButton();
+      if (job.status === "done") { $("run-msg").innerHTML = `<span class="status-done">Finished.</span>`; showResult(job, true); }
+      else { $("run-msg").innerHTML = `<span class="status-error"></span>`; $("run-msg").firstChild.textContent = job.error || "Failed."; }
+      loadRuns();
+    }
+  };
+  state.poll = setInterval(tick, 1500);
+  updateRunButton();
+  tick();
+}
+
+function showResult(job, fit) {
+  if (state.overlay) map.removeLayer(state.overlay);
+  const base = `/runs/${encodeURIComponent(job.id)}/`;
+  state.overlay = L.imageOverlay(base + job.files.preview, job.bounds, { opacity: +$("opacity").value }).addTo(map);
+  if (state.riverLayer) state.riverLayer.bringToFront();
+  if (fit) map.fitBounds(job.bounds, { padding: [20, 20] });
+  $("s-result").hidden = false;
+  $("result-title").innerHTML = `<b></b> <span class="muted"></span>`;
+  $("result-title").children[0].textContent = job.river;
+  $("result-title").children[1].textContent = `· ${job.res_m} m · ${job.cmap}` +
+    (job.centerline_source ? ` · ${job.centerline_source} centerline` : "");
+  const f = job.files;
+  const links = [["Styled GeoTIFF", f.viz], ["Styled PNG", f.viz_png], ["REM GeoTIFF (raw)", f.rem],
+                 ["DEM", f.dem], ["Centerline", "centerline.gpkg"]];
+  $("downloads").innerHTML = links.map(([t, name]) => `<a href="${base}${encodeURIComponent(name)}?dl=1">${t}</a>`).join("");
+}
+$("opacity").oninput = () => state.overlay && state.overlay.setOpacity(+$("opacity").value);
+$("show-lines").onchange = () => {
+  for (const layer of [state.riverLayer, state.rect]) {
+    if (!layer) continue;
+    $("show-lines").checked ? layer.addTo(map) : map.removeLayer(layer);
+  }
+};
+
+async function loadRuns() {
+  const jobs = await api("/api/jobs", {}, true);
+  const ul = $("runs");
+  ul.innerHTML = "";
+  if (!jobs || !jobs.length) { ul.innerHTML = `<li class="muted">No runs yet.</li>`; return; }
+  for (const j of jobs) {
+    const li = document.createElement("li");
+    const when = (j.started || j.id.slice(0, 15)).replace("T", " ").slice(0, 16);
+    li.innerHTML = `<span><b></b><br><span class="muted"></span></span><span class="km status-${j.status}"></span>`;
+    li.querySelector("b").textContent = j.river || j.id;
+    li.querySelector(".muted").textContent = `${when} · ${j.res_m ?? "?"} m · ${j.cmap ?? ""}`;
+    li.lastChild.textContent = j.status === "done" ? "✓" : j.status === "error" ? "failed" : "running";
+    li.onclick = () => {
+      if (j.status === "done") showResult(j, true);
+      else if (j.status === "running") watchJob(j.id);
+      else if (j.bounds) map.fitBounds(j.bounds);
+      else { $("run-msg").innerHTML = `<span class="status-error"></span>`; $("run-msg").firstChild.textContent = j.error || "Failed."; }
+    };
+    ul.appendChild(li);
+  }
+  const running = jobs.find((j) => j.status === "running");
+  if (running && !state.poll) watchJob(running.id);
+}
+
+// ---------- utils
+function getCss(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+async function api(url, opts = {}, quiet = false) {
+  try {
+    const r = await fetch(url, opts);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `${r.status} ${r.statusText}`);
+    return data;
+  } catch (e) {
+    if (!quiet) { $("run-msg").innerHTML = `<span class="status-error"></span>`; $("run-msg").firstChild.textContent = e.message; }
+    return null;
+  }
+}
+loadRuns();
+</script>
+</body>
+</html>

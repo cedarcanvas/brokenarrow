@@ -9,3 +9,6 @@ river_rem_*/
 
 # Upstream RiverREM source clone (package is installed via conda env rem_env)
 tools/RiverREM/
+
+__pycache__/
+*.pyc
