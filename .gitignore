@@ -1,0 +1,11 @@
+.DS_Store
+.claude/
+
+# RiverREM: generated rasters and caches (regenerate with tools/river_rem.sh)
+river_rem_*/
+.osm_cache/
+.cache/
+*_utm13.tif
+
+# Upstream RiverREM source clone (package is installed via conda env rem_env)
+tools/RiverREM/
