@@ -4,7 +4,9 @@
 Run inside the rem_env conda env (see tools/rem_app.sh), then open http://127.0.0.1:5057
 """
 import json
+import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -18,6 +20,17 @@ MAX_MEGAPIXELS = 400  # ~1m over 20x20 km; larger runs exhaust RAM in RiverREM's
 
 app = Flask(__name__, static_folder=os.path.join(HERE, "static"), static_url_path="/static")
 procs: dict[str, subprocess.Popen] = {}
+
+
+class QuietPolling(logging.Filter):
+    """Drop successful job-status polls (the page asks every 1.5 s); keep errors and everything else."""
+    POLL = re.compile(r'"GET /api/jobs(/[^ ?"]*)? HTTP/[\d.]+" 200 ')
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not self.POLL.search(record.getMessage())
+
+
+logging.getLogger("werkzeug").addFilter(QuietPolling())
 
 
 def parse_bbox(raw: str | None) -> tuple:
@@ -140,6 +153,64 @@ def frame_for(body: dict, stretch: dict | None) -> dict:
     return frame
 
 
+# stand-in ramp top for previews when the real one is automatic (known only after the REM)
+PREVIEW_TOP = {"ft": 500, "m": 150}
+
+
+def parse_ramp(src) -> dict:
+    """Colour ramp options from query args or a JSON body, in pipeline.ramp()'s terms."""
+    style = str(src.get("ramp_style", "smooth"))
+    if style not in pipeline.RAMP_STYLES:
+        abort(400, f"ramp_style must be one of {', '.join(pipeline.RAMP_STYLES)}")
+    units = str(src.get("ramp_units", "ft"))
+    if units not in pipeline.UNITS:
+        abort(400, "Units must be ft or m.")
+    log = str(src.get("ramp_log", "1")).lower() not in ("0", "false", "no")
+    try:
+        steps = int(src.get("ramp_steps", 12))
+    except (TypeError, ValueError):
+        abort(400, "Steps must be a whole number.")
+    if not 2 <= steps <= 30:
+        abort(400, "Steps must be between 2 and 30.")
+
+    def height(key: str, label: str, low: float, high: float) -> float | None:
+        raw = src.get(key)
+        if raw in (None, "", "auto"):
+            return None
+        try:
+            value = float(str(raw).replace(",", ""))
+        except ValueError:
+            abort(400, f"{label} must be a number of {pipeline.UNIT_NAMES[units]}, or blank for auto.")
+        if not low <= value <= high:
+            abort(400, f"{label} must be between {low:g} and {high:,g} {units}.")
+        return value
+
+    top = height("ramp_top", "Top of ramp", 1, 20000)
+    first = height("ramp_first", "Lowest band", 0.1, 5000)
+    if first is not None and top is not None and first >= top:
+        abort(400, "Lowest band must be smaller than the top of the ramp.")
+    return {"style": style, "log": log, "steps": steps, "top": top, "units": units, "first": first}
+
+
+def ramp_cli_args(opts: dict) -> list[str]:
+    return ["--ramp", opts["style"], "--spacing", "log" if opts["log"] else "linear", "--steps", str(opts["steps"]),
+            "--units", opts["units"], "--top", str(opts["top"] or "auto"), "--first", str(opts["first"] or "auto")]
+
+
+@app.get("/api/ramp")
+def ramp_preview():
+    """Legend for a colour ramp, so the page can preview it before running."""
+    opts = parse_ramp(request.args)
+    try:
+        legend = pipeline.ramp(request.args.get("cmap", "mako"), opts["top"] or PREVIEW_TOP[opts["units"]],
+                               opts["style"], opts["log"], opts["steps"], opts["units"], opts["first"])["legend"]
+    except ValueError as exc:
+        abort(400, str(exc))
+    legend["auto_top"] = opts["top"] is None
+    legend["preview_top"] = PREVIEW_TOP[opts["units"]]
+    return jsonify(legend)
+
+
 @app.get("/api/pages")
 def pages():
     return jsonify([{"id": k, "label": pipeline.print_spec.PAGE_LABELS[k]} for k in pipeline.print_spec.PAGES])
@@ -188,6 +259,7 @@ def create_job():
     if res not in (1, 3, 10, 30):
         abort(400, "res must be 1, 3, 10 or 30")
     page, orientation = parse_print(body)
+    ramp_opts = parse_ramp(body)
     frame = frame_for(body, stretch)
     bbox = tuple(frame["bbox"])
     if any(p.poll() is None for p in procs.values()):
@@ -202,7 +274,7 @@ def create_job():
     os.makedirs(out, exist_ok=True)
     args = [sys.executable, "-u", os.path.join(HERE, "pipeline.py"), "run", "--river", river,
             "--res", str(res), "--cmap", cmap, "--out", out, "--page", page, "--orientation", orientation,
-            "--title", title, "--subtitle", subtitle]
+            "--title", title, "--subtitle", subtitle, *ramp_cli_args(ramp_opts)]
     if stretch:
         stretch_path = os.path.join(out, "stretch_input.geojson")
         with open(stretch_path, "w") as f:
@@ -211,6 +283,39 @@ def create_job():
     else:
         args += ["--bbox", *map(str, parse_bbox(",".join(map(str, body.get("bbox", [])))))]
     log = open(os.path.join(out, "run.log"), "w")
+    procs[job_id] = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=out)
+    return jsonify({"id": job_id}), 202
+
+
+@app.post("/api/jobs/<job_id>/restyle")
+def restyle_job(job_id):
+    """Recolour a finished run (new ramp, colours or title) without downloading or running RiverREM again."""
+    out = job_dir(job_id)
+    job = read_job(job_id)
+    if job.get("status") == "running":
+        abort(409, "This run is still in progress.")
+    if not (job.get("files") or {}).get("rem"):
+        abort(400, "This run has no saved REM to recolour. Generate it again instead.")
+    if any(p.poll() is None for p in procs.values()):
+        abort(409, "Another job is running. Wait for it to finish.")
+    body = request.get_json(force=True)
+    ramp_opts = parse_ramp(body)
+    args = [sys.executable, "-u", os.path.join(HERE, "pipeline.py"), "restyle", "--run", out,
+            "--cmap", str(body.get("cmap", job.get("cmap", "mako"))), *ramp_cli_args(ramp_opts)]
+    for key in ("title", "subtitle"):
+        if body.get(key) is not None:
+            args += [f"--{key}", str(body[key]).strip()[:160]]
+    # mark it running now: the pipeline takes a few seconds to start, and the page would otherwise
+    # read the old "done" status and stop watching straight away
+    manifest_path = os.path.join(out, "job.json")
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+    manifest.update(status="running", step="viz", error=None)
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    log = open(os.path.join(out, "run.log"), "a")
+    log.write(f"\n--- recolour {datetime.now():%Y-%m-%d %H:%M:%S} ---\n")
+    log.flush()
     procs[job_id] = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=out)
     return jsonify({"id": job_id}), 202
 
