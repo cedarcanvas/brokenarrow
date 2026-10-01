@@ -28,10 +28,32 @@ Opens http://127.0.0.1:5057.
    - The rectangle is set to the smallest round scale (1:24,000, 1:30,000, …) that fits
      the stretch plus the width you chose, then grown to fill the page's map area.
    - Box mode keeps north up and grows your box to the page's proportions.
-4. **Settings**: DEM resolution (1 / 3 / 10 / 30 m; each option shows its pixel count) and
-   color ramp.
+4. **Settings**: DEM resolution (1 / 3 / 10 / 30 m; each option shows its pixel count),
+   color ramp, and how the colors step through the heights:
+   - **Smooth / Stepped**: a continuous gradient, or distinct color bands (4–24 steps).
+     Each band gets an evenly spaced color from the ramp, so thin bands near the river
+     still look clearly different.
+   - **Logarithmic** (on by default): bands are thin near the stream and widen with height
+     (e.g. 0, 2, 5, 10, 18, 30, 50, 80 … ft), using RiverREM's own log spacing. Off spaces
+     them evenly on a round step (0, 100, 200 … ft).
+   - **Lowest band** (stepped): height of the first band, e.g. 2 m. The other bands still
+     widen with height, but from that starting size, so steep valleys don't squeeze the
+     floodplain into a few slivers along the channel (with a 100 m top: 0, 2, 4, 8, 12,
+     16 … m). With Logarithmic off it is the step size.
+   - **Top of ramp**: where the colors end; everything higher gets the last color. Blank
+     uses RiverREM's automatic top (half the highest point above the river). Lowering it
+     (e.g. 60–100 m) spends the colors on the valley floor rather than the ridges.
+   - **Units**: feet or metres, for these fields and the print legend.
+   - The strip under the controls previews the bands and labels. With an automatic top it
+     assumes 500 ft / 150 m, because the real top is only known once the REM is computed.
+   Smooth + Logarithmic + automatic top matches RiverREM's default look.
 5. **Generate**: the app downloads USGS 3DEP elevation covering the whole rectangle, runs
    RiverREM, overlays the result on the map, and builds the print layout in QGIS.
+6. **Recolor this run** (under Result): applies the current color ramp, steps, units and
+   title to a finished run, reusing its DEM, REM and hillshade, so it takes seconds instead
+   of a new download. Opening a past run loads its color settings into the controls to tweak
+   from. Each color style gets its own print files, so you can compare versions. A run whose
+   print or recolor failed can still be recolored, since its elevation data is kept.
 
 ### Print layout
 
@@ -40,7 +62,7 @@ Built headless with the newest installed QGIS (override with `QGIS_APP=/Applicat
 - Title in **High Alpine**; everything else in **Neue Frutiger World** (Book / Medium).
   If a font isn't available (e.g. Adobe Fonts deactivated) **Helvetica** is used instead;
   `job.json` records which fonts were used.
-- Map rotated to the frame, color legend in feet matching RiverREM's log scale, scale bars
+- Map rotated to the frame, color legend (feet or metres) matching the map colors, scale bars
   in miles and kilometres, a north arrow that turns with the map, scale, and data credits.
 - Type, margins and line weights scale with the page, so every size has the same look.
 - Outputs: vector **PDF** (fonts embedded, georeferenced), **PNG** at 300 dpi, and a
@@ -50,13 +72,15 @@ Each run is saved to `river_rem_runs/<timestamp>_<river>_<res>m/`:
 
 | File | What |
 | --- | --- |
-| `<river>_<page>_<layout>.pdf` / `.png` / `.qgz` | print layout |
+| `<river>_<page>_<layout>_<colors>.pdf` / `.png` / `.qgz` | print layout, one set per color style |
 | `dem_*_hillshade-color.tif` / `.png` | REM visualization (north-up, covers the frame) |
 | `dem_*_REM.tif` | raw REM (metres above the river surface) |
 | `dem_*.tif` | 3DEP DEM used |
 | `centerline.gpkg` | river centerline used |
 | `frame.geojson` | print frame rectangle |
 | `stretch.geojson` | stretch mode: traced stretch |
+| `color_table.txt` | the gdaldem color table used to color the REM (latest style) |
+| `.hillshade/` | saved hillshade, reused when recoloring |
 | `print_spec.json` | everything passed to the layout script |
 | `job.json`, `run.log` | parameters, status, log |
 
@@ -74,6 +98,14 @@ conda run -n rem_env python tools/rem_app/pipeline.py trace --start -106.150 38.
 conda run -n rem_env python tools/rem_app/pipeline.py run --start -106.150 38.875 --end -106.105 38.805 \
     --corridor 1000 --res 10 --page 18x24 --orientation auto --title "Arkansas River" \
     --subtitle "Buena Vista"            # --no-print skips the QGIS layout
+
+# stepped colors: 12 bands up to 100 m, starting with a 2 m band (--spacing linear for even bands)
+conda run -n rem_env python tools/rem_app/pipeline.py run --start -106.150 38.875 --end -106.105 38.805 \
+    --ramp stepped --steps 12 --units m --top 100 --first 2
+
+# recolor an existing run without downloading again; options left out keep the run's values
+conda run -n rem_env python tools/rem_app/pipeline.py restyle --run river_rem_runs/<run> \
+    --cmap rocket --first 3
 ```
 
 ## Notes

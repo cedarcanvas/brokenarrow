@@ -7,19 +7,22 @@ Usage (run inside the rem_env conda env):
     pipeline.py rivers --bbox W S E N
     pipeline.py run --bbox W S E N --river "Arkansas River" [--res 10] [--cmap mako] [--out DIR]
     pipeline.py trace --start LON LAT --end LON LAT
-    pipeline.py run --start LON LAT --end LON LAT [--corridor 1500] [--res 10]
+    pipeline.py run --start LON LAT --end LON LAT [--corridor 1500] [--res 10] [--ramp stepped --units m --first 2]
         [--page 11x17] [--orientation auto|horizontal|vertical] [--title T] [--subtitle S] [--no-print]
+    pipeline.py restyle --run river_rem_runs/<run> [--cmap mako] [--ramp stepped] [--spacing log] [--first 2]
 """
 import argparse
 import hashlib
 import json
 import math
 import os
+import random
 import shutil
 import socket
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -53,20 +56,37 @@ def log(msg: str) -> None:
     print(f"[{datetime.now():%H:%M:%S}] {msg}", flush=True)
 
 
+BUSY_CODES = (502, 503, 504)   # gateway/overload responses: the server is busy, not failing on this request
+BUSY_MAX_WAIT = 60             # seconds; cap for one busy back-off
+
+
 def http_get(url: str, params: dict | None = None, timeout: int = 120, retries: int = 3,
-             data: dict | None = None) -> bytes:
-    """GET (or POST form `data`) with retries on HTTP 5xx. Timeouts are not retried."""
+             data: dict | None = None, busy_retries: int = 0) -> bytes:
+    """GET (or POST form `data`) with retries. Timeouts are not retried.
+
+    Errors are retried up to `retries` attempts in total with short pauses. Overload responses
+    (502/503/504) first get up to `busy_retries` extra attempts with exponential back-off
+    (5, 10, 20, 40, 60 s, with jitter) so a busy service gets breathing room instead of more load.
+    """
     full = f"{url}?{urllib.parse.urlencode(params)}" if params else url
     body = urllib.parse.urlencode(data).encode() if data else None
     req = urllib.request.Request(full, data=body, headers={"User-Agent": USER_AGENT})
-    for attempt in range(1, retries + 1):
+    attempt = busy = 0
+    while True:
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.read()
         except (TimeoutError, socket.timeout):
             raise
-        except Exception as exc:  # 502/504s from USGS services are common
-            if attempt == retries:
+        except Exception as exc:
+            if isinstance(exc, urllib.error.HTTPError) and exc.code in BUSY_CODES and busy < busy_retries:
+                busy += 1
+                delay = min(BUSY_MAX_WAIT, 5 * 2 ** (busy - 1)) * random.uniform(0.8, 1.2)
+                log(f"  service busy (HTTP {exc.code}); waiting {delay:.0f} s before retry {busy}/{busy_retries}")
+                time.sleep(delay)
+                continue
+            attempt += 1
+            if attempt >= retries:
                 raise
             log(f"  request failed ({exc}); retrying {attempt}/{retries - 1}")
             time.sleep(2 * attempt)
@@ -390,13 +410,14 @@ def print_frame(page: str = "11x17", orientation: str = "auto", stretch: dict | 
 # ---------------------------------------------------------------- 3DEP
 
 def _fetch_tile(x0: float, y1: float, w: int, h: int, res_m: float, epsg: int, stem: str) -> list[str]:
-    """Download one 3DEP tile (top-left x0, y1); on a server error, split it into quarters and retry.
+    """Download one 3DEP tile (top-left x0, y1).
 
-    The ImageServer gives up (HTTP 500 after ~25 s) when a request needs too much resampling,
-    which happens with 4000 px tiles at 1 m. Smaller requests succeed.
+    Two kinds of failure need opposite responses:
+    - HTTP 500 or a timeout: this request is too big (the ImageServer gives up after ~25 s,
+      e.g. 4000 px tiles at 1 m). Split into quarters and retry; smaller requests succeed.
+    - HTTP 502/503/504: the service is overloaded. More, smaller requests only add load, so
+      http_get backs off and retries the same tile; if it stays busy, stop and say so.
     """
-    import urllib.error
-
     params = {
         "bbox": f"{x0:.3f},{y1 - h * res_m:.3f},{x0 + w * res_m:.3f},{y1:.3f}",
         "bboxSR": epsg,
@@ -409,8 +430,12 @@ def _fetch_tile(x0: float, y1: float, w: int, h: int, res_m: float, epsg: int, s
         "f": "image",
     }
     try:
-        data = http_get(DEM_3DEP, params, timeout=300, retries=2)
+        data = http_get(DEM_3DEP, params, timeout=300, retries=2, busy_retries=5)
     except (urllib.error.HTTPError, TimeoutError, socket.timeout) as exc:
+        if isinstance(exc, urllib.error.HTTPError) and exc.code in BUSY_CODES:
+            raise ServiceUnavailable(
+                f"The USGS 3DEP elevation service is overloaded (HTTP {exc.code}) and didn't recover after "
+                "backing off for about 2 minutes. Try again in a few minutes, or use a coarser resolution.") from exc
         if max(w, h) <= MIN_TILE_PX:
             raise
         log(f"    {w}x{h} tile failed ({exc}); splitting into quarters")
@@ -487,18 +512,18 @@ def make_preview(viz_tif: str, out_png: str, max_px: int = 2048) -> list:
 
 
 FT = 0.3048
-LEGEND_TICKS_FT = (0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000)
+UNITS = {"ft": FT, "m": 1.0}      # metres per display unit
+UNIT_NAMES = {"ft": "feet", "m": "metres"}
+LEGEND_TICKS = {"ft": (0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000),
+                "m": (0, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500)}
+RAMP_STYLES = ("smooth", "stepped")
+RAMP_STEPS = (4, 6, 8, 10, 12, 16, 20, 24)
+MAX_CLASSES = 30
 
 
-def legend_info(rem_tif: str, cmap: str, n_stops: int = 33) -> dict:
-    """Colour stops and tick positions matching RiverREM's log-scaled colour relief.
-
-    RiverREM samples 255 colours at heights logspace(0, log10(max/2), 255) - 1 metres, so colour
-    step k (of 254) sits at height 10**(k/254 * log10(max/2)) - 1. Heights above max/2 get the
-    last colour.
-    """
+def rem_auto_top(rem_tif: str, units: str = "ft") -> float:
+    """RiverREM's default ramp top: half the REM's maximum, in `units`."""
     from osgeo import gdal
-    from riverrem.RasterViz import RasterViz
 
     gdal.UseExceptions()
     ds = gdal.Open(rem_tif)  # keep a reference: the band is invalid once its dataset is freed
@@ -506,23 +531,133 @@ def legend_info(rem_tif: str, cmap: str, n_stops: int = 33) -> dict:
     band.ComputeStatistics(False)
     top_m = 0.5 * band.GetMaximum()
     ds = None
-    span = math.log10(top_m + 1) if top_m > 0 else 1.0
+    return max(top_m / UNITS[units], 1.0)
+
+
+def _nice(v: float) -> float:
+    """Round a class break to a value that reads well on a legend (same rules for feet or metres)."""
+    if v < 1:
+        return max(0.5, round(v * 2) / 2)
+    for limit, step in ((10, 1), (30, 2), (100, 5), (300, 10), (1000, 50), (3000, 100)):
+        if v < limit:
+            return round(v / step) * step
+    return round(v / 500) * 500
+
+
+def _nice_step(v: float) -> float:
+    """Smallest 1/2/2.5/5 x 10^k that is >= v (an even step size for linear ramps)."""
+    k = math.floor(math.log10(v))
+    for m in (1, 2, 2.5, 5, 10):
+        if m * 10 ** k >= v - 1e-9:
+            return m * 10 ** k
+    return 10 ** (k + 1)
+
+
+def _knee_for_first_band(top_m: float, first_m: float, steps: int) -> float | None:
+    """Knee c (metres) for the log curve h(f) = c * ((top/c + 1)**f - 1) so the first of `steps`
+    bands is first_m tall. Larger c widens the low bands. None if first_m is so large that even
+    evenly spaced bands are thinner (then the caller should space evenly).
+    """
+    if first_m >= top_m / steps:
+        return None
+
+    def first(c: float) -> float:
+        return c * ((top_m / c + 1) ** (1 / steps) - 1)
+
+    lo, hi = 1e-6, 1e9   # first() rises monotonically with c, from ~0 to top/steps
+    for _ in range(200):
+        mid = math.sqrt(lo * hi)
+        lo, hi = (mid, hi) if first(mid) < first_m else (lo, mid)
+    return math.sqrt(lo * hi)
+
+
+def ramp(cmap: str, top: float, style: str = "smooth", log: bool = True, steps: int = 12,
+         units: str = "ft", first: float | None = None) -> dict:
+    """Colour table (for gdaldem color-relief) and legend for the REM colour ramp.
+
+    Heights (top, first and the legend) are in `units` ("ft" or "m"); the colour table is in metres.
+
+    log=True follows a log curve h(f) = c * ((top/c + 1)**f - 1) for f in [0, 1], so colours change
+    fastest near the river. c = 1 m is RiverREM's own curve. For stepped ramps, `first` sets the
+    height of the lowest band and c is solved to match, so the low bands can be widened for steep
+    valleys. log=False spaces heights evenly (`first`, if given, is the step size).
+    Stepped ramps get one evenly spaced colour per class, so thin classes stay distinct.
+    Heights above the top get the last colour.
+    """
+    from riverrem.RasterViz import RasterViz
+
+    if style not in RAMP_STYLES:
+        raise ValueError(f"ramp style must be one of {RAMP_STYLES}")
+    if units not in UNITS:
+        raise ValueError(f"units must be one of {tuple(UNITS)}")
     cm = RasterViz._get_cm_mpl(cmap)
+    u = UNITS[units]
+    top_m = top * u
+    knee = 1.0
+    if log and style == "stepped" and first:
+        knee = _knee_for_first_band(top_m, first * u, steps)
+        if knee is None:   # requested first band is wider than even spacing allows
+            log = False
 
-    def hexcolor(k: int) -> str:
-        r, g, b = (round(c * 254 + 1) for c in cm(k)[:3])
-        return f"#{r:02x}{g:02x}{b:02x}"
+    def rgb(k: int) -> tuple:   # same 1..255 scaling RiverREM uses (0 is reserved for nodata)
+        return tuple(round(c * 254 + 1) for c in cm(int(k))[:3])
 
-    stops = [[round(i / (n_stops - 1), 4), hexcolor(round(i / (n_stops - 1) * 254))] for i in range(n_stops)]
-    ticks, last = [], -1.0
-    for ft in LEGEND_TICKS_FT:
-        frac = math.log10(ft * FT + 1) / span
-        if frac > 1.0001:
-            break
-        if frac - last >= 0.09:   # keep labels from crowding on short ramps
-            ticks.append([round(frac, 4), f"{ft:,}"])
-            last = frac
-    return {"top_m": round(top_m, 2), "top_ft": round(top_m / FT, 1), "stops": stops, "ticks": ticks}
+    def hexc(k: int) -> str:
+        return "#%02x%02x%02x" % rgb(k)
+
+    def height_m(f: float) -> float:
+        return knee * ((top_m / knee + 1) ** f - 1) if log else top_m * f
+
+    def position(v: float) -> float:   # inverse of height_m, as a fraction of the ramp
+        h = v * u
+        return math.log(h / knee + 1) / math.log(top_m / knee + 1) if log else h / top_m
+
+    if style == "stepped":
+        if log:
+            bounds = [0.0]
+            for i in range(1, steps):
+                b = _nice(height_m(i / steps) / u)
+                if bounds[-1] < b < top:
+                    bounds.append(b)
+            bounds.append(_nice(top) if _nice(top) > bounds[-1] else top)
+        else:   # one step size, top rounded up to a whole step, so every class is the same height
+            if first:
+                step = first if top / first <= MAX_CLASSES else _nice_step(top / MAX_CLASSES)
+            else:
+                k = math.floor(math.log10(top / steps))
+                options = [m * 10 ** e for e in (k - 1, k, k + 1) for m in (1, 2, 2.5, 5)]
+                step = min(options, key=lambda s: (abs(math.ceil(top / s - 1e-9) - steps), -s))
+            bounds = [round(step * i, 6) for i in range(math.ceil(top / step - 1e-9) + 1)]
+        n = len(bounds) - 1
+        ks = [round(i / (n - 1) * 254) if n > 1 else 0 for i in range(n)]
+        table = [f"-100000 {' '.join(map(str, rgb(ks[0])))}"]
+        for i in range(1, n):   # two entries per break, a hair apart, give a hard edge
+            table.append(f"{bounds[i] * u - 0.0005:.4f} {' '.join(map(str, rgb(ks[i - 1])))}")
+            table.append(f"{bounds[i] * u:.4f} {' '.join(map(str, rgb(ks[i])))}")
+        table.append(f"100000 {' '.join(map(str, rgb(ks[-1])))}")
+        legend = {"mode": "stepped", "top": round(bounds[-1], 2),
+                  "classes": [[bounds[i], bounds[i + 1], hexc(ks[i])] for i in range(n)]}
+    else:
+        table = [f"{height_m(k / 254):.4f} {' '.join(map(str, rgb(k)))}" for k in range(255)]
+        n_stops = 33
+        stops = [[round(i / (n_stops - 1), 4), hexc(round(i / (n_stops - 1) * 254))] for i in range(n_stops)]
+        if log:
+            candidates = LEGEND_TICKS[units]
+        else:
+            step = _nice_step(top / 5)
+            candidates = [step * i for i in range(int(top / step) + 1)]
+        ticks, last = [], -1.0
+        for v in candidates:
+            frac = position(v)
+            if frac > 1.0001:
+                break
+            if frac - last >= 0.09:   # keep labels from crowding; print_layout thins further by width
+                ticks.append([round(frac, 4), f"{v:,g}"])
+                last = frac
+        legend = {"mode": "smooth", "top": round(top, 2), "stops": stops, "ticks": ticks}
+    table.append("nv 0 0 0")
+    legend.update(log=log, cmap=cmap, units=units, unit_name=UNIT_NAMES[units])
+    return {"table": "\n".join(table) + "\n", "legend": legend}
 
 
 def qgis_python() -> tuple[str, dict]:
@@ -577,11 +712,124 @@ def make_print(spec: dict, out_dir: str) -> dict:
         return json.load(f)
 
 
+RAMP_DEFAULTS = {"style": "smooth", "log": True, "steps": 12, "top": None, "units": "ft", "first": None}
+
+
+def make_viz(dem: str, rem_tif: str, out_dir: str, cmap: str, table_path: str,
+             z: float = 4, blend_percent: float = 25) -> str:
+    """Colour the REM with `table_path` and blend it with the DEM's hillshade.
+
+    Mirrors REMMaker.make_rem_viz, but keeps the hillshade (it depends only on the DEM) in
+    <run>/.hillshade/ so recolouring a run skips it. Returns the hillshade-colour GeoTIFF;
+    a georeferenced PNG is written next to it.
+    """
+    import glob
+    from riverrem import RasterViz as rasterviz
+
+    hs_dir, work = os.path.join(out_dir, ".hillshade"), os.path.join(out_dir, ".cache")
+    os.makedirs(hs_dir, exist_ok=True)
+    os.makedirs(work, exist_ok=True)
+    dem_name = os.path.basename(dem).split(".")[0]
+    cached = sorted(glob.glob(os.path.join(hs_dir, "*hillshade*.tif")))
+    if cached:
+        hillshade = cached[0]
+        log("Reusing saved hillshade")
+    else:
+        dem_viz = rasterviz.RasterViz(dem, out_dir=hs_dir, out_ext=".tif")
+        dem_viz.make_hillshade(multidirectional=True, z=z)
+        hillshade = dem_viz.hillshade_ras
+
+    # RiverREM builds its own colour table inside make_color_relief; hand it ours instead
+    original = rasterviz.RasterViz._get_cmap_txt
+    rasterviz.RasterViz._get_cmap_txt = lambda self, cmap, log_scale=False: table_path
+    try:
+        rem_viz = rasterviz.RasterViz(rem_tif, out_dir=work, out_ext=".tif", make_png=True, make_kmz=False)
+        rem_viz.make_color_relief(cmap=cmap, log_scale=True)
+    finally:
+        rasterviz.RasterViz._get_cmap_txt = original
+    rem_viz.out_rasters["hillshade-color"] = os.path.join(out_dir, f"{dem_name}_hillshade-color.tif")
+    rem_viz.hillshade_ras = hillshade
+    rem_viz.viz_srs = rem_viz.proj
+    viz_tif = rem_viz.make_hillshade_color(blend_percent=blend_percent)
+    shutil.rmtree(work, ignore_errors=True)
+    return viz_tif
+
+
+def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict,
+                  title: str | None, subtitle: str | None, make_pdf: bool) -> None:
+    """Colour the REM, then build the map preview and print layout. Used by run() and restyle()."""
+    files = manifest["files"]
+    dem, rem_tif = os.path.join(out_dir, files["dem"]), os.path.join(out_dir, files["rem"])
+    opts = {**RAMP_DEFAULTS, **ramp_opts}
+    units = opts["units"]
+    top = opts["top"] or rem_auto_top(rem_tif, units)
+    colors = ramp(cmap, top, opts["style"], opts["log"], opts["steps"], units, opts["first"])
+    table_path = os.path.join(out_dir, "color_table.txt")
+    with open(table_path, "w") as f:
+        f.write(colors["table"])
+    legend = colors["legend"]
+    log(f"Colour ramp: {cmap}, {opts['style']}, {'log' if legend['log'] else 'linear'}, top {top:,.0f} {units}"
+        + (f", {len(legend['classes'])} classes from {legend['classes'][0][1]:g} {units}"
+           if opts["style"] == "stepped" else ""))
+    title = title or manifest.get("title") or manifest["river"]
+    subtitle = subtitle if subtitle is not None else manifest.get("subtitle", "River Relative Elevation Model")
+    save(step="viz", cmap=cmap, ramp=opts, title=title, subtitle=subtitle)
+    viz_tif = make_viz(dem, rem_tif, out_dir, cmap, table_path)
+
+    save(step="preview")
+    preview = os.path.join(out_dir, "preview_4326.png")
+    bounds = make_preview(viz_tif, preview)
+    files.update(viz=os.path.basename(viz_tif), viz_png=os.path.basename(viz_tif).replace(".tif", ".png"),
+                 color_table="color_table.txt", preview=os.path.basename(preview))
+    for stale in ("pdf", "png", "qgz"):
+        files.pop(stale, None)
+
+    frame = manifest.get("print_frame")
+    if make_pdf and frame:
+        save(step="print", files=files, bounds=bounds)
+        source = manifest.get("centerline_source", "NHD")
+        data = "USGS NHD HighRes" if source == "NHD" else "© OpenStreetMap contributors"
+        slug = "".join(c if c.isalnum() else "-" for c in manifest["river"].lower()).strip("-")
+        style = f"{''.join(c if c.isalnum() else '-' for c in cmap)}-{opts['style']}"
+        spec = {
+            "out_dir": os.path.abspath(out_dir),
+            "viz_tif": os.path.abspath(viz_tif),
+            "frame": frame,
+            "title": title,
+            "subtitle": subtitle,
+            "legend": legend,
+            "credits": (f"Elevation: USGS 3DEP {manifest['res_m']:g} m  ·  River: {data}  ·  "
+                        f"REM: RiverREM  ·  UTM {frame['epsg'] - 26900}N  ·  {datetime.now():%b %Y}"),
+            # one set of print files per colour style, so restyles don't overwrite each other
+            "basename": f"{slug}_{frame['page']}_{frame['orientation']}_{style}",
+            "dpi": 300,
+        }
+        printed = make_print(spec, out_dir)
+        files.update({k: printed[k] for k in ("pdf", "png", "qgz")})
+        save(fonts=printed.get("fonts"))
+    elif make_pdf:
+        log("No print frame saved for this run; skipping the print layout.")
+    save(files=files, bounds=bounds)
+
+
+def _job_saver(out_dir: str, manifest: dict):
+    path = os.path.join(out_dir, "job.json")
+
+    def save(**updates):
+        manifest.update(updates)
+        with open(path, "w") as f:
+            json.dump(manifest, f, indent=2)
+    return save
+
+
 def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
         bbox: tuple | None = None, stretch: dict | None = None, corridor_m: float = 1500,
         page: str = "11x17", orientation: str = "auto", title: str | None = None,
-        subtitle: str | None = None, make_pdf: bool = True) -> dict:
-    """Generate a REM and print layout for `river`, framed on a drawn bbox or a stretch (GeoJSON, EPSG:4326)."""
+        subtitle: str | None = None, make_pdf: bool = True, ramp_opts: dict | None = None) -> dict:
+    """Generate a REM and print layout for `river`, framed on a drawn bbox or a stretch (GeoJSON, EPSG:4326).
+
+    ramp_opts: style, log, steps, top, units, first (see ramp()); top=None uses RiverREM's automatic top.
+    """
     from riverrem.REMMaker import REMMaker
 
     frame = print_frame(page, orientation, stretch=stretch, bbox=bbox, corridor_m=corridor_m)
@@ -589,12 +837,13 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
     slug = "".join(c if c.isalnum() else "-" for c in river.lower()).strip("-")
     out_dir = out_dir or os.path.join(RUNS_DIR, f"{datetime.now():%Y%m%d-%H%M%S}_{slug}_{res_m:g}m")
     os.makedirs(out_dir, exist_ok=True)
-    manifest_path = os.path.join(out_dir, "job.json")
     manifest = {"bbox": list(bbox), "river": river, "res_m": res_m, "cmap": cmap,
                 "mode": "stretch" if stretch else "box", "page": page,
                 "orientation": frame["orientation"], "scale": frame["scale"],
-                "rotation": frame["rotation"], "frame": frame["frame"], "pid": os.getpid(),
+                "rotation": frame["rotation"], "frame": frame["frame"], "print_frame": frame,
+                "pid": os.getpid(), "files": {},
                 "status": "running", "started": datetime.now().isoformat(timespec="seconds")}
+    save = _job_saver(out_dir, manifest)
     with open(os.path.join(out_dir, "frame.geojson"), "w") as f:
         json.dump({"type": "Feature", "properties": {k: frame[k] for k in ("page", "orientation", "scale", "rotation")},
                    "geometry": frame["frame"]}, f)
@@ -602,11 +851,6 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
         manifest["corridor_m"] = corridor_m
         with open(os.path.join(out_dir, "stretch.geojson"), "w") as f:
             json.dump({"type": "Feature", "properties": {"river": river}, "geometry": stretch}, f)
-
-    def save(**updates):
-        manifest.update(updates)
-        with open(manifest_path, "w") as f:
-            json.dump(manifest, f, indent=2)
 
     save(step="centerline")
     try:
@@ -632,48 +876,90 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
         rem = REMMaker(dem=dem, centerline_shp=centerline, out_dir=out_dir,
                        cache_dir=os.path.join(out_dir, ".cache"))
         rem_tif = rem.make_rem()
-        save(step="viz")
-        viz_tif = rem.make_rem_viz(cmap=cmap, make_png=True)
-        viz_png = viz_tif.replace(".tif", ".png")
-
-        save(step="preview")
-        preview = os.path.join(out_dir, "preview_4326.png")
-        bounds = make_preview(viz_tif, preview)
         shutil.rmtree(os.path.join(out_dir, ".cache"), ignore_errors=True)
-        files = {"rem": os.path.basename(rem_tif), "viz": os.path.basename(viz_tif),
-                 "viz_png": os.path.basename(viz_png), "dem": os.path.basename(dem),
-                 "centerline": "centerline.gpkg", "frame": "frame.geojson",
-                 "preview": os.path.basename(preview)}
+        manifest["files"].update(rem=os.path.basename(rem_tif), dem=os.path.basename(dem),
+                                 centerline="centerline.gpkg", frame="frame.geojson")
         if stretch:
-            files["stretch"] = "stretch.geojson"
+            manifest["files"]["stretch"] = "stretch.geojson"
 
-        if make_pdf:
-            save(step="print")
-            data = "USGS NHD HighRes" if source == "NHD" else "© OpenStreetMap contributors"
-            spec = {
-                "out_dir": os.path.abspath(out_dir),
-                "viz_tif": os.path.abspath(viz_tif),
-                "frame": frame,
-                "title": title or river,
-                "subtitle": subtitle if subtitle is not None else "River Relative Elevation Model",
-                "legend": legend_info(rem_tif, cmap),
-                "credits": (f"Elevation: USGS 3DEP {res_m:g} m  ·  River: {data}  ·  "
-                            f"REM: RiverREM  ·  UTM {epsg - 26900}N  ·  {datetime.now():%b %Y}"),
-                "basename": f"{slug}_{page}_{frame['orientation']}",
-                "dpi": 300,
-            }
-            printed = make_print(spec, out_dir)
-            files.update({k: printed[k] for k in ("pdf", "png", "qgz")})
-            save(fonts=printed.get("fonts"))
-
-        save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"),
-             bounds=bounds, files=files)
+        style_outputs(out_dir, manifest, save, cmap, ramp_opts or {}, title, subtitle, make_pdf)
+        save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"))
         log(f"Done: {out_dir}")
     except Exception as exc:
         save(status="error", error=str(exc))
         log(f"ERROR: {exc}")
         raise
     return manifest
+
+
+def restyle(out_dir: str, cmap: str | None = None, ramp_opts: dict | None = None,
+            title: str | None = None, subtitle: str | None = None, make_pdf: bool = True) -> dict:
+    """Recolour a finished run and rebuild its preview and print, reusing its DEM and REM (no download).
+
+    Options left as None keep the run's previous values.
+    """
+    with open(os.path.join(out_dir, "job.json")) as f:
+        manifest = json.load(f)
+    files = manifest.get("files", {})
+    missing = [k for k in ("dem", "rem") if not files.get(k) or not os.path.exists(os.path.join(out_dir, files[k]))]
+    if missing:
+        raise RuntimeError(f"This run has no saved {' or '.join(missing).upper()}, so it can't be recoloured.")
+    if not manifest.get("print_frame"):   # runs from before print_frame was stored kept it in print_spec.json
+        spec_path = os.path.join(out_dir, "print_spec.json")
+        if os.path.exists(spec_path):
+            with open(spec_path) as f:
+                manifest["print_frame"] = json.load(f).get("frame")
+    previous = {**RAMP_DEFAULTS, **(manifest.get("ramp") or {})}
+    if "top_ft" in previous:   # older runs stored the top in feet
+        previous["top"], previous["units"] = previous.pop("top_ft"), "ft"
+    opts = {**previous, **(ramp_opts or {})}   # ramp_opts holds only the options that were given
+    cmap = cmap or manifest.get("cmap", "mako")
+
+    save = _job_saver(out_dir, manifest)
+    save(status="running", step="viz", pid=os.getpid(), error=None,
+         restyled=datetime.now().isoformat(timespec="seconds"))
+    try:
+        log(f"Recolouring {os.path.basename(out_dir)} (reusing its DEM and REM)")
+        style_outputs(out_dir, manifest, save, cmap, opts, title, subtitle, make_pdf)
+        save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"))
+        log("Done")
+    except Exception as exc:
+        save(status="error", error=str(exc))
+        log(f"ERROR: {exc}")
+        raise
+    return manifest
+
+
+def add_ramp_args(sp, keep: bool = False) -> None:
+    """Colour options. With keep=True (restyle) every default is None, meaning "keep the run's value"."""
+    d = (lambda v: None) if keep else (lambda v: v)
+    sp.add_argument("--cmap", default=d("mako"), help="matplotlib / seaborn / cmocean colormap")
+    sp.add_argument("--ramp", default=d("smooth"), choices=RAMP_STYLES, help="continuous ramp or distinct steps")
+    sp.add_argument("--spacing", default=d("log"), choices=("log", "linear"),
+                    help="log: finer steps near the stream (default); linear: even steps")
+    sp.add_argument("--steps", type=int, default=d(12), help="number of colour steps (--ramp stepped)")
+    sp.add_argument("--units", default=d("ft"), choices=tuple(UNITS), help="units for --top, --first and the legend")
+    sp.add_argument("--top", default=d("auto"), help="height where the ramp ends, or 'auto'")
+    sp.add_argument("--first", default=d("auto"),
+                    help="stepped ramps: height of the lowest band (e.g. 2 with --units m), or 'auto'")
+
+
+def ramp_from_args(args) -> dict:
+    """Only the options that were given (None means 'not given')."""
+    opts = {}
+    if args.ramp is not None:
+        opts["style"] = args.ramp
+    if args.spacing is not None:
+        opts["log"] = args.spacing == "log"
+    if args.steps is not None:
+        opts["steps"] = args.steps
+    if args.units is not None:
+        opts["units"] = args.units
+    for key in ("top", "first"):
+        value = getattr(args, key)
+        if value is not None:
+            opts[key] = None if str(value).lower() == "auto" else float(value)
+    return opts
 
 
 def main() -> int:
@@ -694,13 +980,19 @@ def main() -> int:
     g.add_argument("--corridor", type=float, default=1500,
                    help="stretch mode: minimum metres shown each side of the river")
     g.add_argument("--res", type=float, default=10, help="DEM resolution in metres (1, 3, 10, 30)")
-    g.add_argument("--cmap", default="mako")
     g.add_argument("--page", default="11x17", choices=list(print_spec.PAGES))
     g.add_argument("--orientation", default="auto", choices=["auto", "horizontal", "vertical"])
     g.add_argument("--title", help="map title (default: river name)")
     g.add_argument("--subtitle", help="map subtitle (default: River Relative Elevation Model)")
     g.add_argument("--no-print", action="store_true", help="skip the QGIS print layout")
     g.add_argument("--out", default=None)
+    add_ramp_args(g)
+    s = sub.add_parser("restyle", help="recolour a finished run without downloading again")
+    s.add_argument("--run", required=True, help="run folder, e.g. river_rem_runs/20261001-..._10m")
+    s.add_argument("--title")
+    s.add_argument("--subtitle")
+    s.add_argument("--no-print", action="store_true", help="skip the QGIS print layout")
+    add_ramp_args(s, keep=True)
     args = p.parse_args()
 
     if args.cmd == "rivers":
@@ -712,6 +1004,9 @@ def main() -> int:
     if args.cmd == "trace":
         tr = trace_stretch(tuple(args.start), tuple(args.end), args.river)
         print(f"{tr['river']} ({tr['source']}): {tr['length_km']} km, snapped {tr['snap_m'][0]} m / {tr['snap_m'][1]} m")
+        return 0
+    if args.cmd == "restyle":
+        restyle(args.run, args.cmap, ramp_from_args(args), args.title, args.subtitle, not args.no_print)
         return 0
 
     stretch, river = None, args.river
@@ -730,7 +1025,7 @@ def main() -> int:
         p.error("--river is required")
     run(river, args.res, args.cmap, args.out, bbox=tuple(args.bbox) if args.bbox else None,
         stretch=stretch, corridor_m=args.corridor, page=args.page, orientation=args.orientation,
-        title=args.title, subtitle=args.subtitle, make_pdf=not args.no_print)
+        title=args.title, subtitle=args.subtitle, make_pdf=not args.no_print, ramp_opts=ramp_from_args(args))
     return 0
 
 

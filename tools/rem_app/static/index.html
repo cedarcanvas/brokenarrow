@@ -72,6 +72,13 @@
          color: #fff; font: 700 11px/18px -apple-system, sans-serif; text-align: center; }
   .pin.a { background: #2e9d5b; } .pin.b { background: #c8372d; }
   .err { color: var(--err); }
+  #ramp-preview { margin-top: 10px; }
+  #ramp-bar { display: flex; height: 16px; border: 1px solid var(--ink); border-radius: 2px; overflow: hidden; }
+  #ramp-bar span { flex: 1; }
+  #ramp-labels { position: relative; height: 16px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #ramp-labels span { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
+  #ramp-labels span:first-child { transform: none; }
+  #ramp-labels span:last-child { transform: translateX(-100%); }
   .hint { position: absolute; z-index: 1000; left: 50%; top: 12px; transform: translateX(-50%); background: var(--panel);
           color: var(--ink); padding: 6px 12px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.2); font-size: 13px; display: none; }
   main { position: relative; }
@@ -158,6 +165,34 @@
       <option>cmo.tempo</option><option>cmo.ice</option><option>viridis</option><option>Spectral_r</option>
       <option>rocket</option><option>Blues_r</option>
     </select>
+    <label>Color steps</label>
+    <div class="seg" role="tablist">
+      <button id="ramp-smooth" class="on" role="tab">Smooth</button>
+      <button id="ramp-stepped" role="tab">Stepped</button>
+    </div>
+    <label style="display:flex;gap:6px;align-items:center;margin-top:0">
+      <input type="checkbox" id="ramp-log" checked> Logarithmic: finer steps near the stream
+    </label>
+    <div class="row" style="flex-wrap:nowrap">
+      <div style="flex:1" id="ramp-steps-wrap" hidden><label for="ramp-steps">Steps</label>
+        <select id="ramp-steps">
+          <option>4</option><option>6</option><option>8</option><option>10</option>
+          <option selected>12</option><option>16</option><option>20</option><option>24</option>
+        </select></div>
+      <div style="flex:1" id="ramp-first-wrap" hidden><label for="ramp-first">Lowest band (<span class="unit">ft</span>)</label>
+        <input id="ramp-first" type="text" inputmode="decimal" placeholder="auto"></div>
+    </div>
+    <div class="row" style="flex-wrap:nowrap">
+      <div style="flex:1"><label for="ramp-top">Top of ramp (<span class="unit">ft</span>)</label>
+        <input id="ramp-top" type="text" inputmode="decimal" placeholder="auto"></div>
+      <div style="flex:1"><label for="ramp-units">Units</label>
+        <select id="ramp-units"><option value="ft" selected>Feet</option><option value="m">Metres</option></select></div>
+    </div>
+    <div id="ramp-preview" aria-label="Color ramp preview">
+      <div id="ramp-bar"></div>
+      <div id="ramp-labels"></div>
+    </div>
+    <div id="ramp-note" class="muted"></div>
   </section>
 
   <section id="s-run">
@@ -178,6 +213,11 @@
     <input type="range" id="opacity" min="0" max="1" step="0.05" value="0.9">
     <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="show-lines" checked> Show river lines &amp; area outline</label>
     <div class="dl" id="downloads"></div>
+    <div style="margin-top:12px">
+      <button id="btn-recolor">Recolor this run</button>
+      <div class="muted" style="margin-top:6px">Applies the color ramp, steps and title above to this run's
+        existing elevation data, with no new download. Each color style keeps its own print files.</div>
+    </div>
   </section>
 
   <section>
@@ -476,6 +516,71 @@ function selectRiver(name) {
   updateRunButton();
 }
 
+// ---------- colour ramp
+const ramp = { style: "smooth", seq: 0, timer: null };
+function rampParams() {
+  return { cmap: $("cmap").value, ramp_style: ramp.style, ramp_log: $("ramp-log").checked ? 1 : 0,
+           ramp_steps: +$("ramp-steps").value, ramp_units: $("ramp-units").value,
+           ramp_top: $("ramp-top").value.trim() || "auto",
+           ramp_first: (ramp.style === "stepped" && $("ramp-first").value.trim()) || "auto" };
+}
+function setRampStyle(style) {
+  ramp.style = style;
+  $("ramp-smooth").classList.toggle("on", style === "smooth");
+  $("ramp-stepped").classList.toggle("on", style === "stepped");
+  $("ramp-steps-wrap").hidden = $("ramp-first-wrap").hidden = style !== "stepped";
+  refreshRamp();
+}
+$("ramp-smooth").onclick = () => setRampStyle("smooth");
+$("ramp-stepped").onclick = () => setRampStyle("stepped");
+for (const id of ["ramp-log", "ramp-steps", "cmap"]) $(id).addEventListener("change", refreshRamp);
+$("ramp-units").addEventListener("change", () => {
+  for (const s of document.querySelectorAll(".unit")) s.textContent = $("ramp-units").value;
+  refreshRamp();
+});
+for (const id of ["ramp-top", "ramp-first"]) {
+  $(id).oninput = () => { clearTimeout(ramp.timer); ramp.timer = setTimeout(refreshRamp, 350); };
+}
+
+async function refreshRamp() {
+  const seq = ++ramp.seq;
+  const q = new URLSearchParams(rampParams());
+  const legend = await api(`/api/ramp?${q}`, {}, true, true);
+  if (seq !== ramp.seq) return;
+  const bar = $("ramp-bar"), labels = $("ramp-labels"), note = $("ramp-note");
+  if (legend.error) {
+    note.innerHTML = `<span class="err"></span>`; note.firstChild.textContent = legend.error; return;
+  }
+  const fmt = (v) => Number(v).toLocaleString();
+  bar.innerHTML = ""; labels.innerHTML = "";
+  let marks;
+  if (legend.mode === "stepped") {
+    bar.style.background = "";
+    for (const [, , color] of legend.classes) {
+      const s = document.createElement("span"); s.style.background = color; bar.appendChild(s);
+    }
+    const n = legend.classes.length;
+    marks = legend.classes.map(([lo], i) => [i / n, fmt(lo)]);
+    marks.push([1, fmt(legend.classes[n - 1][1]) + "+"]);
+  } else {
+    bar.style.background = `linear-gradient(to right, ${legend.stops.map(([p, c]) => `${c} ${p * 100}%`).join(", ")})`;
+    marks = legend.ticks.map(([p, t]) => [p, t]);
+    if (legend.top > Number(String(marks.at(-1)[1]).replace(/,/g, ""))) marks.push([1, fmt(Math.round(legend.top)) + "+"]);
+  }
+  // same rule as the print legend: drop labels that would collide, but always keep the top
+  const width = bar.clientWidth || 300, gap = 30, kept = [];
+  marks.forEach(([p, t], i) => {
+    if (kept.length && (p - kept.at(-1)[0]) * width < gap) { if (i !== marks.length - 1) return; kept.pop(); }
+    kept.push([p, t]);
+  });
+  for (const [p, t] of kept) {
+    const s = document.createElement("span"); s.style.left = `${p * 100}%`; s.textContent = t; labels.appendChild(s);
+  }
+  note.textContent = legend.auto_top
+    ? `Preview assumes a ${legend.preview_top} ${legend.units} top; the real top is set from the terrain when you generate.`
+    : "";
+}
+
 // ---------- settings
 function updateResolution() {
   const warn = $("res-warn");
@@ -499,6 +604,7 @@ $("res").onchange = updateResolution;
 function updateRunButton() {
   const running = !!state.poll;
   $("btn-run").disabled = running || !state.bbox || !state.selected;
+  $("btn-recolor").disabled = running || !state.resultId;
 }
 
 // ---------- jobs
@@ -509,7 +615,7 @@ $("btn-run").onclick = async () => {
       state.mode === "stretch"
         ? { stretch: state.stretch }
         : { bbox: state.bbox },
-      frameParams(),
+      frameParams(), rampParams(),
       { title: $("title").value.trim() || state.selected, subtitle: $("subtitle").value.trim() })) });
   if (!res) return;
   watchJob(res.id);
@@ -534,8 +640,14 @@ function watchJob(id) {
     $("log").scrollTop = $("log").scrollHeight;
     if (job.status !== "running") {
       clearInterval(state.poll); state.poll = null; updateRunButton();
-      if (job.status === "done") { $("run-msg").innerHTML = `<span class="status-done">Finished.</span>`; showResult(job, true); }
-      else { $("run-msg").innerHTML = `<span class="status-error"></span>`; $("run-msg").firstChild.textContent = job.error || "Failed."; }
+      if (job.status === "done") {
+        $("run-msg").innerHTML = `<span class="status-done">${state.recoloring ? "Recolored." : "Finished."}</span>`;
+        showResult(job, !state.recoloring);   // keep the view when only the colours changed
+      } else {
+        $("run-msg").innerHTML = `<span class="status-error"></span>`;
+        $("run-msg").firstChild.textContent = job.error || "Failed.";
+      }
+      state.recoloring = false;
       loadRuns();
     }
   };
@@ -544,10 +656,38 @@ function watchJob(id) {
   tick();
 }
 
+// load a run's colour settings into the controls, so Recolor starts from what that run used
+function applyRampSettings(job) {
+  const r = job.ramp || {};
+  if (job.cmap && [...$("cmap").options].some((o) => o.value === job.cmap)) $("cmap").value = job.cmap;
+  $("ramp-log").checked = r.log !== false;
+  if (r.steps && [...$("ramp-steps").options].some((o) => +o.value === r.steps)) $("ramp-steps").value = r.steps;
+  $("ramp-units").value = r.units || "ft";
+  for (const s of document.querySelectorAll(".unit")) s.textContent = $("ramp-units").value;
+  $("ramp-top").value = r.top ?? r.top_ft ?? "";
+  $("ramp-first").value = r.first ?? "";
+  if (job.title && job.title !== job.river) $("title").value = job.title;
+  if (job.subtitle !== undefined) $("subtitle").value = job.subtitle;
+  setRampStyle(r.style || "smooth");
+}
+
+$("btn-recolor").onclick = async () => {
+  if (!state.resultId || state.poll) return;
+  const body = Object.assign(rampParams(), { subtitle: $("subtitle").value.trim() });
+  if ($("title").value.trim()) body.title = $("title").value.trim();
+  $("run-msg").textContent = "";
+  const res = await api(`/api/jobs/${encodeURIComponent(state.resultId)}/restyle`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (res) { state.recoloring = true; watchJob(res.id); }
+};
+
 function showResult(job, fit) {
   if (state.overlay) map.removeLayer(state.overlay);
+  state.resultId = job.id;
   const base = `/runs/${encodeURIComponent(job.id)}/`;
-  state.overlay = L.imageOverlay(base + job.files.preview, job.bounds, { opacity: +$("opacity").value }).addTo(map);
+  const v = encodeURIComponent(job.finished || job.restyled || "");   // bust the browser cache after a recolor
+  state.overlay = L.imageOverlay(`${base}${job.files.preview}?v=${v}`, job.bounds,
+    { opacity: +$("opacity").value }).addTo(map);
   if (state.riverLayer) state.riverLayer.bringToFront();
   if (fit) map.fitBounds(job.bounds, { padding: [20, 20] });
   $("s-result").hidden = false;
@@ -561,7 +701,8 @@ function showResult(job, fit) {
                  ["Styled GeoTIFF", f.viz], ["Styled PNG", f.viz_png], ["REM GeoTIFF (raw)", f.rem],
                  ["DEM", f.dem], ["Centerline", f.centerline || "centerline.gpkg"],
                  ["Stretch", f.stretch], ["Print frame", f.frame], ["Corridor", f.corridor]].filter(([, name]) => name);
-  $("downloads").innerHTML = links.map(([t, name]) => `<a href="${base}${encodeURIComponent(name)}?dl=1">${t}</a>`).join("");
+  $("downloads").innerHTML = links.map(([t, name]) =>
+    `<a href="${base}${encodeURIComponent(name)}?dl=1&v=${v}">${t}</a>`).join("");
 }
 $("opacity").oninput = () => state.overlay && state.overlay.setOpacity(+$("opacity").value);
 $("show-lines").onchange = () => {
@@ -584,10 +725,14 @@ async function loadRuns() {
     li.querySelector(".muted").textContent = `${when} · ${j.res_m ?? "?"} m · ${j.cmap ?? ""}`;
     li.lastChild.textContent = j.status === "done" ? "✓" : j.status === "error" ? "failed" : "running";
     li.onclick = () => {
-      if (j.status === "done") showResult(j, true);
-      else if (j.status === "running") watchJob(j.id);
+      if (j.status === "done") { showResult(j, true); applyRampSettings(j); return; }
+      if (j.status === "running") { watchJob(j.id); return; }
+      // a failed run that still has its REM (e.g. a recolor or print that broke) can be shown and recolored
+      if (j.files && j.files.rem && j.files.preview && j.bounds) { showResult(j, true); applyRampSettings(j); }
       else if (j.bounds) map.fitBounds(j.bounds);
-      else { $("run-msg").innerHTML = `<span class="status-error"></span>`; $("run-msg").firstChild.textContent = j.error || "Failed."; }
+      $("run-msg").innerHTML = `<span class="status-error"></span>`;
+      $("run-msg").firstChild.textContent = (j.error || "Failed.") +
+        (j.files && j.files.rem ? " Its elevation data is saved, so you can Recolor it." : "");
     };
     ul.appendChild(li);
   }
@@ -610,6 +755,7 @@ async function api(url, opts = {}, quiet = false, returnError = false) {
   }
 }
 resetInfo();
+refreshRamp();
 api("/api/pages", {}, true).then((pages) => {
   for (const p of pages || []) $("page").add(new Option(p.label, p.id, false, p.id === "11x17"));
 });

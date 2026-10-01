@@ -149,6 +149,67 @@ def add_scalebar(layout, map_item, rect, scale, unit, fmt, height_mm, min_seg_mm
     return bar
 
 
+def outline_layer(stroke_mm: float) -> QgsSimpleFillSymbolLayer:
+    layer = QgsSimpleFillSymbolLayer(QColor(0, 0, 0, 0), Qt.BrushStyle.NoBrush, INK, Qt.PenStyle.SolidLine, stroke_mm)
+    layer.setStrokeWidthUnit(Qgis.RenderUnit.Millimeters)
+    return layer
+
+
+def add_ticks(layout, labels, bar, tick_fmt, geo):
+    """Tick marks and labels under the legend bar at (x_mm, text), dropping any that would collide.
+
+    The last label (the ramp top) always wins over its neighbour.
+    """
+    x0, y, w, h = bar
+    u = geo["unit"]
+    label_w, min_gap = 5 * u, 4.4 * u   # min_gap: roughly the printed width of "1,000" plus a space
+    kept = []
+    for i, (x, text) in enumerate(labels):
+        if kept and x - kept[-1][0] < min_gap:
+            if i != len(labels) - 1:
+                continue
+            kept.pop()
+        kept.append((x, text))
+    tick_sym = QgsFillSymbol.createSimple({"color": INK.name(), "outline_style": "no"})
+    for x, text in kept:
+        tx = x0 + x
+        add_rect(layout, (tx - geo["stroke"] / 2, y + h, geo["stroke"], 0.6 * u), tick_sym.clone())
+        add_label(layout, text, tick_fmt, (tx - label_w / 2, y + h + 0.9 * u, label_w, 1.8 * u),
+                  halign=Qt.AlignmentFlag.AlignHCenter)
+
+
+def draw_smooth_legend(layout, legend, bar, tick_fmt, geo):
+    x0, y, w, h = bar
+    stops = legend["stops"]
+    grad = QgsGradientFillSymbolLayer()
+    grad.setGradientColorType(Qgis.GradientColorSource.ColorRamp)
+    grad.setColorRamp(QgsGradientColorRamp(QColor(stops[0][1]), QColor(stops[-1][1]), False,
+                                           [QgsGradientStop(p, QColor(c)) for p, c in stops[1:-1]]))
+    grad.setGradientType(Qgis.GradientType.Linear)
+    grad.setCoordinateMode(Qgis.SymbolCoordinateReference.Feature)
+    grad.setReferencePoint1(QPointF(0, 0.5))
+    grad.setReferencePoint2(QPointF(1, 0.5))
+    add_rect(layout, bar, QgsFillSymbol([grad, outline_layer(geo["stroke"])]))
+    labels = [(frac * w, text) for frac, text in legend["ticks"]]
+    top = legend.get("top", legend.get("top_ft"))   # runs from before units were added use top_ft
+    if top > float(legend["ticks"][-1][1].replace(",", "")):
+        labels.append((w, f"{top:,.0f}+"))
+    add_ticks(layout, labels, bar, tick_fmt, geo)
+
+
+def draw_stepped_legend(layout, legend, bar, tick_fmt, geo):
+    """One equal-width box per class, so thin classes near the river stay readable; labels at the breaks."""
+    x0, y, w, h = bar
+    classes = legend["classes"]
+    bw = w / len(classes)
+    for i, (_, _, color) in enumerate(classes):
+        add_rect(layout, (x0 + i * bw, y, bw, h), QgsFillSymbol.createSimple({"color": color, "outline_style": "no"}))
+    add_rect(layout, bar, QgsFillSymbol([outline_layer(geo["stroke"])]))
+    labels = [(i * bw, f"{lo:,g}") for i, (lo, _, _) in enumerate(classes)]
+    labels.append((w, f"{classes[-1][1]:,g}+"))
+    add_ticks(layout, labels, bar, tick_fmt, geo)
+
+
 def build(spec: dict) -> dict:
     frame, legend = spec["frame"], spec["legend"]
     geo = print_spec.layout(frame["page"], frame["landscape"])
@@ -193,44 +254,16 @@ def build(spec: dict) -> dict:
     if spec.get("subtitle"):
         add_label(layout, spec["subtitle"], text_format(body_family, "Book", t["subtitle"], MUTED), geo["subtitle"])
 
-    # --- legend: log-scaled colour ramp, labelled in feet
+    # --- legend: colour ramp in feet (smooth gradient, or one box per class for stepped ramps)
     lx, ly, lw, lh = geo["legend"]
-    add_label(layout, "Height above river (feet)", text_format(body_family, "Medium", t["label"]),
-              (lx, ly, lw, 2.4 * u))
-    bar_y, bar_h = ly + 3.4 * u, 1.7 * u
-    stops = legend["stops"]
-    grad = QgsGradientFillSymbolLayer()
-    grad.setGradientColorType(Qgis.GradientColorSource.ColorRamp)
-    grad.setColorRamp(QgsGradientColorRamp(QColor(stops[0][1]), QColor(stops[-1][1]), False,
-                                           [QgsGradientStop(p, QColor(c)) for p, c in stops[1:-1]]))
-    grad.setGradientType(Qgis.GradientType.Linear)
-    grad.setCoordinateMode(Qgis.SymbolCoordinateReference.Feature)
-    grad.setReferencePoint1(QPointF(0, 0.5))
-    grad.setReferencePoint2(QPointF(1, 0.5))
-    outline = QgsSimpleFillSymbolLayer(QColor(0, 0, 0, 0), Qt.BrushStyle.NoBrush, INK, Qt.PenStyle.SolidLine,
-                                       geo["stroke"])
-    outline.setStrokeWidthUnit(Qgis.RenderUnit.Millimeters)
-    add_rect(layout, (lx, bar_y, lw, bar_h), QgsFillSymbol([grad, outline]))
+    add_label(layout, f"Height above river ({legend.get('unit_name', 'feet')})",
+              text_format(body_family, "Medium", t["label"]), (lx, ly, lw, 2.4 * u))
+    bar = (lx, ly + 3.4 * u, lw, 1.7 * u)
     tick_fmt = text_format(body_family, "Book", t["small"])
-    tick_sym = QgsFillSymbol.createSimple({"color": INK.name(), "outline_style": "no"})
-    label_w = 5 * u
-    min_gap = 4.4 * u   # roughly the printed width of "1,000" plus a space
-    ticks, last_x = [], None
-    for frac, text in legend["ticks"]:
-        if last_x is None or frac * lw - last_x >= min_gap:
-            ticks.append((frac, text))
-            last_x = frac * lw
-    legend["ticks"] = ticks
-    for frac, text in ticks:
-        tx = lx + frac * lw
-        add_rect(layout, (tx - geo["stroke"] / 2, bar_y + bar_h, geo["stroke"], 0.6 * u), tick_sym.clone())
-        add_label(layout, text, tick_fmt, (tx - label_w / 2, bar_y + bar_h + 0.9 * u, label_w, 1.8 * u),
-                  halign=Qt.AlignmentFlag.AlignHCenter)
-    last_frac, last_ft = legend["ticks"][-1][0], float(legend["ticks"][-1][1].replace(",", ""))
-    if legend["top_ft"] > last_ft and (1 - last_frac) * lw >= 1.2 * label_w:
-        add_label(layout, f"{legend['top_ft']:,.0f}+", tick_fmt,
-                  (lx + lw - label_w / 2, bar_y + bar_h + 0.9 * u, label_w, 1.8 * u),
-                  halign=Qt.AlignmentFlag.AlignHCenter)
+    if legend.get("mode") == "stepped":
+        draw_stepped_legend(layout, legend, bar, tick_fmt, geo)
+    else:
+        draw_smooth_legend(layout, legend, bar, tick_fmt, geo)
 
     # --- scale bars (miles above km), north arrow, scale text, credits
     sx, sy, sw, sh = geo["scalebar"]
