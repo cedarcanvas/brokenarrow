@@ -7,7 +7,8 @@ Usage (run inside the rem_env conda env):
     pipeline.py rivers --bbox W S E N
     pipeline.py run --bbox W S E N --river "Arkansas River" [--res 10] [--cmap mako] [--out DIR]
     pipeline.py trace --start LON LAT --end LON LAT
-    pipeline.py run --start LON LAT --end LON LAT [--corridor 1500] [--no-clip] [--res 10]
+    pipeline.py run --start LON LAT --end LON LAT [--corridor 1500] [--res 10]
+        [--page 11x17] [--orientation auto|horizontal|vertical] [--title T] [--subtitle S] [--no-print]
 """
 import argparse
 import hashlib
@@ -16,6 +17,7 @@ import math
 import os
 import shutil
 import socket
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -28,11 +30,15 @@ from rasterio.merge import merge
 from rasterio.warp import transform_bounds
 from shapely.geometry import LineString, box
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import print_spec  # noqa: E402  (shared with the QGIS layout script)
+
 NHD_FLOWLINES = "https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer/3/query"
 OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.openstreetmap.fr/api/interpreter"]
 DEM_3DEP = "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage"
 USER_AGENT = "RiverREM-Studio/1.0 (ridgelinemaps)"
-TILE_PX = 4000  # 3DEP caps requests at 8000 px; smaller tiles fail less often
+TILE_PX = 2000      # 3DEP caps requests at 8000 px, but 4000 px tiles at 1 m time out (HTTP 500)
+MIN_TILE_PX = 250   # failing tiles are split down to this size before giving up
 NODATA = -9999.0
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 RUNS_DIR = os.path.join(REPO_ROOT, "river_rem_runs")
@@ -285,27 +291,143 @@ def trace_stretch(start: tuple, end: tuple, river: str | None = None) -> dict:
             "snap_m": [round(d1), round(d2)], "stretch": stretch.__geo_interface__}
 
 
-def corridor(stretch: dict, corridor_m: float) -> tuple[dict, tuple]:
-    """Buffer a stretch (GeoJSON LineString, EPSG:4326) by corridor_m each side.
+def _norm_deg(a: float) -> float:
+    """Normalise an axis angle to (-90, 90]; a line at 100° is the same axis as one at -80°."""
+    a = (a + 90) % 180 - 90
+    return 90.0 if a == -90 else a
 
-    Returns (polygon GeoJSON in EPSG:4326, bbox W S E N covering it).
+
+def print_frame(page: str = "11x17", orientation: str = "auto", stretch: dict | None = None,
+                bbox: tuple | None = None, corridor_m: float = 1500) -> dict:
+    """The rotated rectangle that a print page shows, at a nice scale.
+
+    Stretch mode turns the map so the river's main axis runs horizontally (landscape page) or
+    vertically (portrait); "auto" picks whichever needs less rotation from north-up. The frame
+    covers the stretch plus corridor_m each side, grown to the page's map aspect. Box mode keeps
+    north up and grows the drawn box to the page aspect.
+
+    Returns the frame geometry (UTM and EPSG:4326), the map rotation for QGIS, the scale, and
+    the north-up bbox the DEM must cover.
     """
+    import numpy as np
     from pyproj import Transformer
-    from shapely.geometry import shape
-    from shapely.ops import transform as shp_transform
 
-    line = shape(stretch)
-    c = line.centroid
-    epsg = utm_epsg(c.x, c.y)
+    if stretch:
+        lonlat = np.array(stretch["coordinates"], dtype=float)
+    elif bbox:
+        w, s, e, n = bbox
+        lonlat = np.array([(w, s), (e, s), (e, n), (w, n)], dtype=float)
+    else:
+        raise ValueError("print_frame needs a stretch or a bbox")
+    if page not in print_spec.PAGES:
+        raise ValueError(f"page must be one of {', '.join(print_spec.PAGES)}")
+    if orientation not in ("auto", "horizontal", "vertical"):
+        raise ValueError("orientation must be auto, horizontal or vertical")
+
+    lon_c, lat_c = lonlat.mean(axis=0)
+    epsg = utm_epsg(lon_c, lat_c)
     to_utm = Transformer.from_crs(4326, epsg, always_xy=True)
     to_ll = Transformer.from_crs(epsg, 4326, always_xy=True)
-    poly_utm = shp_transform(to_utm.transform, line).buffer(corridor_m, quad_segs=16)
-    bbox = transform_bounds(f"EPSG:{epsg}", "EPSG:4326", *poly_utm.bounds, densify_pts=21)
-    poly = shp_transform(to_ll.transform, poly_utm.simplify(1))
-    return poly.__geo_interface__, tuple(round(v, 6) for v in bbox)
+    pts = np.column_stack(to_utm.transform(lonlat[:, 0], lonlat[:, 1]))
+    origin = pts.mean(axis=0)
+
+    if stretch:
+        # principal axis of the stretch (robust to meanders, unlike start->end)
+        _, _, vt = np.linalg.svd(pts - origin, full_matrices=False)
+        axis = math.degrees(math.atan2(vt[0][1], vt[0][0]))
+        phi_h, phi_v = _norm_deg(axis), _norm_deg(axis - 90)
+        if orientation == "auto":
+            orientation = "horizontal" if abs(phi_h) <= abs(phi_v) else "vertical"
+        phi = phi_h if orientation == "horizontal" else phi_v
+        pad_across = corridor_m
+    else:
+        span_x, span_y = np.ptp(pts[:, 0]), np.ptp(pts[:, 1])
+        if orientation == "auto":
+            orientation = "horizontal" if span_x >= span_y else "vertical"
+        phi, pad_across = 0.0, 0.0
+    landscape = orientation == "horizontal"
+
+    # page axes in world coordinates: x along phi, y perpendicular (up)
+    ux = np.array([math.cos(math.radians(phi)), math.sin(math.radians(phi))])
+    vy = np.array([-ux[1], ux[0]])
+    rel = pts - origin
+    u, v = rel @ ux, rel @ vy
+    # the river runs along page x when horizontal, along page y when vertical
+    along, across = (u, v) if landscape else (v, u)
+    pad_along = 0.03 * np.ptp(along) if stretch else 0.0
+    pad_u, pad_v = (pad_along, pad_across) if landscape else (pad_across, pad_along)
+    u0, u1 = u.min() - pad_u, u.max() + pad_u
+    v0, v1 = v.min() - pad_v, v.max() + pad_v
+
+    map_w, map_h = print_spec.map_size(page, landscape)
+    scale = print_spec.nice_scale(max((u1 - u0) / map_w, (v1 - v0) / map_h) * 1000)
+    width_m, height_m = map_w * scale / 1000, map_h * scale / 1000
+    center = origin + (u0 + u1) / 2 * ux + (v0 + v1) / 2 * vy
+    corners = [center + sx * width_m / 2 * ux + sy * height_m / 2 * vy
+               for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+
+    # north-up area the DEM must cover, with a small margin so resampling has data at the edges
+    xs, ys = [c[0] for c in corners], [c[1] for c in corners]
+    margin = 0.01 * max(width_m, height_m) + 30
+    dem_utm = (min(xs) - margin, min(ys) - margin, max(xs) + margin, max(ys) + margin)
+    dem_bbox = transform_bounds(f"EPSG:{epsg}", "EPSG:4326", *dem_utm, densify_pts=21)
+    ring = [list(to_ll.transform(*c)) for c in corners]
+    return {
+        "page": page,
+        "orientation": orientation,
+        "landscape": landscape,
+        "epsg": epsg,
+        "rotation": round(phi, 3),          # QGIS map rotation (content clockwise, degrees)
+        "scale": scale,
+        "center": [round(float(center[0]), 2), round(float(center[1]), 2)],
+        "width_m": round(width_m, 1),
+        "height_m": round(height_m, 1),
+        "frame": {"type": "Polygon", "coordinates": [ring + [ring[0]]]},
+        "bbox": [round(v, 6) for v in dem_bbox],
+    }
 
 
 # ---------------------------------------------------------------- 3DEP
+
+def _fetch_tile(x0: float, y1: float, w: int, h: int, res_m: float, epsg: int, stem: str) -> list[str]:
+    """Download one 3DEP tile (top-left x0, y1); on a server error, split it into quarters and retry.
+
+    The ImageServer gives up (HTTP 500 after ~25 s) when a request needs too much resampling,
+    which happens with 4000 px tiles at 1 m. Smaller requests succeed.
+    """
+    import urllib.error
+
+    params = {
+        "bbox": f"{x0:.3f},{y1 - h * res_m:.3f},{x0 + w * res_m:.3f},{y1:.3f}",
+        "bboxSR": epsg,
+        "imageSR": epsg,
+        "size": f"{w},{h}",
+        "format": "tiff",
+        "pixelType": "F32",
+        "noData": NODATA,
+        "interpolation": "RSP_BilinearInterpolation",
+        "f": "image",
+    }
+    try:
+        data = http_get(DEM_3DEP, params, timeout=300, retries=2)
+    except (urllib.error.HTTPError, TimeoutError, socket.timeout) as exc:
+        if max(w, h) <= MIN_TILE_PX:
+            raise
+        log(f"    {w}x{h} tile failed ({exc}); splitting into quarters")
+        hw, hh = math.ceil(w / 2), math.ceil(h / 2)
+        parts = []
+        for k, (dx, dy, sw, sh) in enumerate([(0, 0, hw, hh), (hw, 0, w - hw, hh),
+                                               (0, hh, hw, h - hh), (hw, hh, w - hw, h - hh)]):
+            if sw > 0 and sh > 0:
+                parts += _fetch_tile(x0 + dx * res_m, y1 - dy * res_m, sw, sh, res_m, epsg, f"{stem}{k}")
+        return parts
+    if not data.startswith((b"II*\x00", b"MM\x00*")):
+        raise RuntimeError(f"3DEP returned non-TIFF data: {data[:200]!r}")
+    path = f"{stem}.tif"
+    with open(path, "wb") as f:
+        f.write(data)
+    return [path]
+
 
 def fetch_dem(bbox: tuple, res_m: float, out_tif: str) -> str:
     """Download 3DEP elevation for bbox at res_m, in the bbox's UTM zone, tiling as needed."""
@@ -325,27 +447,8 @@ def fetch_dem(bbox: tuple, res_m: float, out_tif: str) -> str:
             ty1 = ymax - j * TILE_PX * res_m
             tw = min(TILE_PX, width - i * TILE_PX)
             th = min(TILE_PX, height - j * TILE_PX)
-            tbox = (tx0, ty1 - th * res_m, tx0 + tw * res_m, ty1)
-            params = {
-                "bbox": ",".join(f"{v:.3f}" for v in tbox),
-                "bboxSR": epsg,
-                "imageSR": epsg,
-                "size": f"{tw},{th}",
-                "format": "tiff",
-                "pixelType": "F32",
-                "noData": NODATA,
-                "interpolation": "RSP_BilinearInterpolation",
-                "f": "image",
-            }
-            n = j * nx + i + 1
-            log(f"  tile {n}/{nx * ny} ({tw}x{th})")
-            data = http_get(DEM_3DEP, params, timeout=300)
-            if not data.startswith((b"II*\x00", b"MM\x00*")):
-                raise RuntimeError(f"3DEP returned non-TIFF data: {data[:200]!r}")
-            path = os.path.join(tile_dir, f"tile_{j}_{i}.tif")
-            with open(path, "wb") as f:
-                f.write(data)
-            tiles.append(path)
+            log(f"  tile {j * nx + i + 1}/{nx * ny} ({tw}x{th})")
+            tiles += _fetch_tile(tx0, ty1, tw, th, res_m, epsg, os.path.join(tile_dir, f"tile_{j}_{i}"))
 
     srcs = [rasterio.open(p) for p in tiles]
     try:
@@ -383,42 +486,122 @@ def make_preview(viz_tif: str, out_png: str, max_px: int = 2048) -> list:
     return [[s, w], [n, e]]
 
 
-def clip_to_polygon(src_tif: str, poly_geojson: str, out_tif: str) -> str:
-    """Mask a raster to a polygon. RGB rasters get an alpha band; single-band keep their nodata."""
+FT = 0.3048
+LEGEND_TICKS_FT = (0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000)
+
+
+def legend_info(rem_tif: str, cmap: str, n_stops: int = 33) -> dict:
+    """Colour stops and tick positions matching RiverREM's log-scaled colour relief.
+
+    RiverREM samples 255 colours at heights logspace(0, log10(max/2), 255) - 1 metres, so colour
+    step k (of 254) sits at height 10**(k/254 * log10(max/2)) - 1. Heights above max/2 get the
+    last colour.
+    """
     from osgeo import gdal
+    from riverrem.RasterViz import RasterViz
+
     gdal.UseExceptions()
-    src = gdal.Open(src_tif)
-    rgb = src.RasterCount >= 3
-    gdal.Warp(out_tif, src, cutlineDSName=poly_geojson, cropToCutline=True, dstAlpha=rgb,
-              dstNodata=None if rgb else src.GetRasterBand(1).GetNoDataValue(),
-              creationOptions=["COMPRESS=DEFLATE", "TILED=YES"])
-    src = None
-    return out_tif
+    ds = gdal.Open(rem_tif)  # keep a reference: the band is invalid once its dataset is freed
+    band = ds.GetRasterBand(1)
+    band.ComputeStatistics(False)
+    top_m = 0.5 * band.GetMaximum()
+    ds = None
+    span = math.log10(top_m + 1) if top_m > 0 else 1.0
+    cm = RasterViz._get_cm_mpl(cmap)
+
+    def hexcolor(k: int) -> str:
+        r, g, b = (round(c * 254 + 1) for c in cm(k)[:3])
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    stops = [[round(i / (n_stops - 1), 4), hexcolor(round(i / (n_stops - 1) * 254))] for i in range(n_stops)]
+    ticks, last = [], -1.0
+    for ft in LEGEND_TICKS_FT:
+        frac = math.log10(ft * FT + 1) / span
+        if frac > 1.0001:
+            break
+        if frac - last >= 0.09:   # keep labels from crowding on short ramps
+            ticks.append([round(frac, 4), f"{ft:,}"])
+            last = frac
+    return {"top_m": round(top_m, 2), "top_ft": round(top_m / FT, 1), "stops": stops, "ticks": ticks}
 
 
-def run(bbox: tuple | None, river: str, res_m: float, cmap: str, out_dir: str | None = None,
-        stretch: dict | None = None, corridor_m: float = 1500, clip: bool = True) -> dict:
-    """Generate a REM for `river` over bbox, or over a corridor around `stretch` (GeoJSON, EPSG:4326)."""
+def qgis_python() -> tuple[str, dict]:
+    """Python executable and environment of the newest installed QGIS (override with QGIS_APP)."""
+    import glob
+    import plistlib
+
+    def version(app: str) -> tuple:
+        try:
+            with open(os.path.join(app, "Contents", "Info.plist"), "rb") as f:
+                v = plistlib.load(f).get("CFBundleShortVersionString", "0")
+            return tuple(int(p) for p in v.split(".") if p.isdigit())
+        except (OSError, ValueError):
+            return (0,)
+
+    apps = [os.environ["QGIS_APP"]] if os.environ.get("QGIS_APP") else sorted(
+        glob.glob("/Applications/QGIS*.app") + glob.glob(os.path.expanduser("~/Applications/QGIS*.app")),
+        key=version, reverse=True)
+    for app in apps:
+        exes = sorted(glob.glob(os.path.join(app, "Contents", "MacOS", "python3.*[0-9]")))
+        if not exes:
+            continue
+        exe = exes[-1]
+        res = os.path.join(app, "Contents", "Resources", os.path.basename(exe))
+        env = dict(os.environ,
+                   PYTHONPATH=os.pathsep.join([res, os.path.join(res, "lib-dynload"),
+                                               os.path.join(res, "site-packages")]),
+                   PROJ_DATA=os.path.join(app, "Contents", "Resources", "qgis", "proj"),
+                   QT_QPA_PLATFORM="offscreen")
+        env.pop("PYTHONHOME", None)
+        return exe, env
+    raise RuntimeError("QGIS not found in /Applications. Install QGIS or set QGIS_APP.")
+
+
+def make_print(spec: dict, out_dir: str) -> dict:
+    """Run print_layout.py in QGIS to build the PDF, PNG and .qgz for this run."""
+    spec_path = os.path.join(out_dir, "print_spec.json")
+    with open(spec_path, "w") as f:
+        json.dump(spec, f, indent=2)
+    exe, env = qgis_python()
+    log(f"Building print layout with {exe.split('/Contents')[0]}")
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "print_layout.py")
+    proc = subprocess.run([exe, script, spec_path], env=env, capture_output=True, text=True)
+    for line in (proc.stdout + proc.stderr).splitlines():
+        # harmless Qt/GDAL noise: font alias lookup, and QGIS trying to write georeferencing into the PNG
+        if line.strip() and not line.startswith(("Could not find platform", "QStandardPaths", "qt.qpa.fonts",
+                                                 "ERROR 6: The PNG driver")):
+            log(f"  qgis: {line}")
+    if proc.returncode != 0:
+        raise RuntimeError(f"QGIS print layout failed (exit {proc.returncode}); see log.")
+    with open(os.path.join(out_dir, "print_result.json")) as f:
+        return json.load(f)
+
+
+def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
+        bbox: tuple | None = None, stretch: dict | None = None, corridor_m: float = 1500,
+        page: str = "11x17", orientation: str = "auto", title: str | None = None,
+        subtitle: str | None = None, make_pdf: bool = True) -> dict:
+    """Generate a REM and print layout for `river`, framed on a drawn bbox or a stretch (GeoJSON, EPSG:4326)."""
     from riverrem.REMMaker import REMMaker
 
-    corridor_poly = None
-    if stretch:
-        corridor_poly, bbox = corridor(stretch, corridor_m)
+    frame = print_frame(page, orientation, stretch=stretch, bbox=bbox, corridor_m=corridor_m)
+    bbox = tuple(frame["bbox"])
     slug = "".join(c if c.isalnum() else "-" for c in river.lower()).strip("-")
     out_dir = out_dir or os.path.join(RUNS_DIR, f"{datetime.now():%Y%m%d-%H%M%S}_{slug}_{res_m:g}m")
     os.makedirs(out_dir, exist_ok=True)
     manifest_path = os.path.join(out_dir, "job.json")
     manifest = {"bbox": list(bbox), "river": river, "res_m": res_m, "cmap": cmap,
-                "mode": "stretch" if stretch else "box",
+                "mode": "stretch" if stretch else "box", "page": page,
+                "orientation": frame["orientation"], "scale": frame["scale"],
+                "rotation": frame["rotation"], "frame": frame["frame"], "pid": os.getpid(),
                 "status": "running", "started": datetime.now().isoformat(timespec="seconds")}
+    with open(os.path.join(out_dir, "frame.geojson"), "w") as f:
+        json.dump({"type": "Feature", "properties": {k: frame[k] for k in ("page", "orientation", "scale", "rotation")},
+                   "geometry": frame["frame"]}, f)
     if stretch:
-        manifest.update(corridor_m=corridor_m, clip=clip)
+        manifest["corridor_m"] = corridor_m
         with open(os.path.join(out_dir, "stretch.geojson"), "w") as f:
             json.dump({"type": "Feature", "properties": {"river": river}, "geometry": stretch}, f)
-        corridor_path = os.path.join(out_dir, "corridor.geojson")
-        with open(corridor_path, "w") as f:
-            json.dump({"type": "FeatureCollection", "features": [
-                {"type": "Feature", "properties": {}, "geometry": corridor_poly}]}, f)
 
     def save(**updates):
         manifest.update(updates)
@@ -427,13 +610,15 @@ def run(bbox: tuple | None, river: str, res_m: float, cmap: str, out_dir: str | 
 
     save(step="centerline")
     try:
+        log(f"Frame: {print_spec.PAGE_LABELS[page]} {frame['orientation']}, 1:{frame['scale']:,}, "
+            f"rotated {frame['rotation']:g}°, {frame['width_m'] / 1000:.1f} × {frame['height_m'] / 1000:.1f} km")
         log(f"Getting centerline for {river!r}")
         lines, source = named_lines(bbox)
         lines = lines[lines["gnis_name"] == river].clip(bbox)
         lines = lines[~lines.geometry.is_empty]
         if lines.empty:
             raise RuntimeError(f"No {source} river lines named {river!r} in this area.")
-        epsg = bbox_epsg(bbox)
+        epsg = frame["epsg"]
         centerline = os.path.join(out_dir, "centerline.gpkg")
         lines.to_crs(epsg).to_file(centerline, driver="GPKG")
         save(centerline_source=source)
@@ -449,15 +634,7 @@ def run(bbox: tuple | None, river: str, res_m: float, cmap: str, out_dir: str | 
         rem_tif = rem.make_rem()
         save(step="viz")
         viz_tif = rem.make_rem_viz(cmap=cmap, make_png=True)
-
         viz_png = viz_tif.replace(".tif", ".png")
-        if stretch and clip:
-            log(f"Clipping to {corridor_m / 1000:g} km corridor")
-            rem_tif = clip_to_polygon(rem_tif, corridor_path, rem_tif.replace(".tif", "_corridor.tif"))
-            viz_tif = clip_to_polygon(viz_tif, corridor_path, viz_tif.replace(".tif", "_corridor.tif"))
-            from osgeo import gdal
-            viz_png = viz_tif.replace(".tif", ".png")
-            gdal.Translate(viz_png, viz_tif, format="PNG")
 
         save(step="preview")
         preview = os.path.join(out_dir, "preview_4326.png")
@@ -465,9 +642,30 @@ def run(bbox: tuple | None, river: str, res_m: float, cmap: str, out_dir: str | 
         shutil.rmtree(os.path.join(out_dir, ".cache"), ignore_errors=True)
         files = {"rem": os.path.basename(rem_tif), "viz": os.path.basename(viz_tif),
                  "viz_png": os.path.basename(viz_png), "dem": os.path.basename(dem),
-                 "centerline": "centerline.gpkg", "preview": os.path.basename(preview)}
+                 "centerline": "centerline.gpkg", "frame": "frame.geojson",
+                 "preview": os.path.basename(preview)}
         if stretch:
-            files.update(stretch="stretch.geojson", corridor="corridor.geojson")
+            files["stretch"] = "stretch.geojson"
+
+        if make_pdf:
+            save(step="print")
+            data = "USGS NHD HighRes" if source == "NHD" else "© OpenStreetMap contributors"
+            spec = {
+                "out_dir": os.path.abspath(out_dir),
+                "viz_tif": os.path.abspath(viz_tif),
+                "frame": frame,
+                "title": title or river,
+                "subtitle": subtitle if subtitle is not None else "River Relative Elevation Model",
+                "legend": legend_info(rem_tif, cmap),
+                "credits": (f"Elevation: USGS 3DEP {res_m:g} m  ·  River: {data}  ·  "
+                            f"REM: RiverREM  ·  UTM {epsg - 26900}N  ·  {datetime.now():%b %Y}"),
+                "basename": f"{slug}_{page}_{frame['orientation']}",
+                "dpi": 300,
+            }
+            printed = make_print(spec, out_dir)
+            files.update({k: printed[k] for k in ("pdf", "png", "qgz")})
+            save(fonts=printed.get("fonts"))
+
         save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"),
              bounds=bounds, files=files)
         log(f"Done: {out_dir}")
@@ -493,10 +691,15 @@ def main() -> int:
     g.add_argument("--end", nargs=2, type=float, metavar=("LON", "LAT"))
     g.add_argument("--stretch", help="GeoJSON file with the stretch LineString (from the app)")
     g.add_argument("--river", help="river name; required with --bbox, optional with --start/--end")
-    g.add_argument("--corridor", type=float, default=1500, help="stretch mode: metres each side of the river")
-    g.add_argument("--no-clip", action="store_true", help="stretch mode: keep the full rectangle")
+    g.add_argument("--corridor", type=float, default=1500,
+                   help="stretch mode: minimum metres shown each side of the river")
     g.add_argument("--res", type=float, default=10, help="DEM resolution in metres (1, 3, 10, 30)")
     g.add_argument("--cmap", default="mako")
+    g.add_argument("--page", default="11x17", choices=list(print_spec.PAGES))
+    g.add_argument("--orientation", default="auto", choices=["auto", "horizontal", "vertical"])
+    g.add_argument("--title", help="map title (default: river name)")
+    g.add_argument("--subtitle", help="map subtitle (default: River Relative Elevation Model)")
+    g.add_argument("--no-print", action="store_true", help="skip the QGIS print layout")
     g.add_argument("--out", default=None)
     args = p.parse_args()
 
@@ -525,8 +728,9 @@ def main() -> int:
         p.error("run needs --bbox, --start/--end, or --stretch")
     if not river:
         p.error("--river is required")
-    run(tuple(args.bbox) if args.bbox else None, river, args.res, args.cmap, args.out,
-        stretch=stretch, corridor_m=args.corridor, clip=not args.no_clip)
+    run(river, args.res, args.cmap, args.out, bbox=tuple(args.bbox) if args.bbox else None,
+        stretch=stretch, corridor_m=args.corridor, page=args.page, orientation=args.orientation,
+        title=args.title, subtitle=args.subtitle, make_pdf=not args.no_print)
     return 0
 
 
