@@ -199,11 +199,13 @@ def parse_labels(src) -> dict:
         abort(400, "River labels must be auto, white, black or off.")
     if scope not in ("river", "all"):
         abort(400, "Label scope must be river or all.")
-    return {"color": color, "scope": scope}
+    places = str(src.get("places", "1")).lower() not in ("0", "false", "no")
+    return {"color": color, "scope": scope, "places": places}
 
 
 def label_cli_args(opts: dict) -> list[str]:
-    return ["--labels", opts["color"], "--label-scope", opts["scope"]]
+    return ["--labels", opts["color"], "--label-scope", opts["scope"],
+            "--places" if opts.get("places", True) else "--no-places"]
 
 
 def ramp_cli_args(opts: dict) -> list[str]:

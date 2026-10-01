@@ -61,8 +61,18 @@ Opens http://127.0.0.1:5057.
 
 Built headless with the newest installed QGIS (override with `QGIS_APP=/Applications/….app`):
 
-- Title in **High Alpine**; everything else in **Neue Frutiger World** (Book / Medium;
-  river names in Book Italic).
+- House style of the Ridgeline Maps 14ers atlas: centred capital title in **High Alpine**
+  (atlas navy #002868), centred capital subtitle and slate (#5b6b7e) scale note and credits
+  in **Neue Frutiger World**, the atlas's slender navy north needle, and the Ridgeline Maps
+  logo (`static/ridgeline_logo.png`, copied from `Dropbox/Maps/14ers/Data`).
+- **Place names** (Print section, on by default): major landforms from USGS GNIS (The National
+  Map *Landforms* layer), styled like the atlas: summits get a small dark triangle and
+  Heavy Italic "Name / 14,414 ft" with the elevation read from the run's DEM; valleys,
+  gulches, passes, basins and flats are Regular and centred on their point; ranges are spaced
+  capitals beside their point. All use the atlas's 0.4 mm cream halo; higher summits win label
+  conflicts. The atlas sets these sizes for 24×36; smaller pages scale them by √(page ratio),
+  never below 75 %. Duplicate GNIS entries and notes like "(not official)" are removed.
+- River names in Neue Frutiger World Book Italic.
   If a font isn't available (e.g. Adobe Fonts deactivated) **Helvetica** is used instead;
   `job.json` records which fonts were used.
 - **River labels** (Print section): small italic names along the channel, no halo. *Auto*
@@ -89,6 +99,7 @@ Each run is saved to `river_rem_runs/<timestamp>_<river>_<res>m/`:
 | `color_table.txt` | the gdaldem color table used to color the REM (latest style) |
 | `.hillshade/` | saved hillshade, reused when recoloring |
 | `streams.gpkg` | other named streams in the frame, when labelling all streams |
+| `places.gpkg` | named landforms printed on the map, with elevations |
 | `print_spec.json` | everything passed to the layout script |
 | `job.json`, `run.log` | parameters, status, log |
 
@@ -113,7 +124,7 @@ conda run -n rem_env python tools/rem_app/pipeline.py run --start -106.150 38.87
 
 # recolor an existing run without downloading again; options left out keep the run's values
 conda run -n rem_env python tools/rem_app/pipeline.py restyle --run river_rem_runs/<run> \
-    --cmap rocket --first 3 --invert --labels auto --label-scope all
+    --cmap rocket --first 3 --invert --labels auto --label-scope all   # --no-places to drop landform names
 ```
 
 ## Notes
