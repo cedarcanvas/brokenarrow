@@ -58,6 +58,11 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
+@app.get("/favicon.ico")
+def favicon():
+    return send_from_directory(app.static_folder, "favicon.svg", mimetype="image/svg+xml")
+
+
 @app.get("/api/rivers")
 def rivers():
     return jsonify(pipeline.list_rivers(parse_bbox(request.args.get("bbox"))))
