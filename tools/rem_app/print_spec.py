@@ -46,13 +46,18 @@ def layout(page: str, landscape: bool) -> dict:
         "title": (m, m, fw, 8 * u),
         "subtitle": (m, m + 8.6 * u, fw, 3.6 * u),
         "legend": (m, fy, min(34 * u, fw * 0.36), 9 * u),
-        "scalebar": (m + fw * 0.42, fy, fw * 0.30, 9 * u),
-        "north": (pw - m - 5 * u, fy, 5 * u, 7.5 * u),
-        "scale_text": (pw - m - fw * 0.24, fy + 0.4 * u, fw * 0.24 - 6.5 * u, 3 * u),
+        "scalebar": (m + fw * 0.40, fy, fw * 0.30, 9 * u),
+        # right of the footer, as in the 14ers atlas: scale text, the slender north needle, the logo
+        "logo": (pw - m - 5.5 * u, fy - 0.3 * u, 5.5 * u, 5.5 * u),
+        "north": (pw - m - 5.5 * u - 1.6 * u - 2.6 * u, fy + 0.6 * u, 2.6 * u, 3.9 * u),
+        "scale_text": (pw - m - fw * 0.26, fy + 1.3 * u, fw * 0.26 - 11.5 * u, 3 * u),
         "credits": (m, ph - m - 1.8 * u, fw, 1.8 * u),
         # type sizes, as cap-ish heights in mm (converted to points in the layout script)
-        "type": {"title": 6.0 * u, "subtitle": 2.2 * u, "label": 1.35 * u, "small": 1.05 * u,
+        "type": {"title": 5.5 * u, "subtitle": 1.7 * u, "label": 1.35 * u, "small": 1.05 * u,
                  "credits": 0.9 * u, "river": 0.7 * u},
+        # the 14ers atlas sets map type in fixed points for 24x36; smaller pages scale it more gently
+        # than the map (sqrt), never below 75 %, so names stay legible on Letter
+        "map_type_scale": max(0.75, (min(pw, ph) / PAGES["24x36"][0]) ** 0.5),
         "stroke": 0.12 * u,
     }
 

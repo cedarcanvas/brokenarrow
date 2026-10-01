@@ -28,8 +28,12 @@ from qgis.core import (
     QgsLayoutPoint,
     QgsLayoutSize,
     QgsLineSymbol,
+    QgsMarkerSymbol,
     QgsNullSymbolRenderer,
     QgsPalLayerSettings,
+    QgsProperty,
+    QgsSingleSymbolRenderer,
+    QgsTextBufferSettings,
     QgsVectorLayer,
     QgsVectorLayerSimpleLabeling,
     QgsPrintLayout,
@@ -48,7 +52,12 @@ import print_spec  # noqa: E402
 
 MM = Qgis.LayoutUnit.Millimeters
 INK = QColor("#1d2a2f")
-MUTED = QColor("#55636a")
+# 14ers atlas house colours
+NAVY = QColor("#002868")        # title, north needle
+SLATE = QColor("#5b6b7e")       # subtitle, scale note, credits
+PLACE_INK = QColor("#232323")   # place names and summit triangles
+HALO = QColor("#fcfaf5")        # cream halo behind place names
+MUTED = SLATE
 PT_PER_MM = 72 / 25.4
 CAP_TO_EM = 1.45   # spec sizes are roughly cap heights; a font's point size is ~1.45x that
 
@@ -249,6 +258,76 @@ def river_label_layers(project, labels: dict, geo: dict, body_family: str) -> li
     return layers
 
 
+def atlas_format(family: str, style: str, points: float, color: QColor, halo_mm: float) -> QgsTextFormat:
+    """Text in fixed points with the atlas's cream halo, multi-line text centred."""
+    fmt = QgsTextFormat()
+    fmt.setFont(QFont(family))
+    if style in QFontDatabase.styles(family):
+        fmt.setNamedStyle(style)
+    fmt.setSize(points)
+    fmt.setSizeUnit(Qgis.RenderUnit.Points)
+    fmt.setColor(color)
+    halo = QgsTextBufferSettings()
+    halo.setEnabled(True)
+    halo.setSize(halo_mm)
+    halo.setSizeUnit(Qgis.RenderUnit.Millimeters)
+    halo.setColor(HALO)
+    fmt.setBuffer(halo)
+    return fmt
+
+
+def place_name_layers(project, path: str, geo: dict, body_family: str) -> list:
+    """Landform names in the 14ers atlas style.
+
+    Summits: small dark triangle, Heavy Italic "Name / elevation ft" set around the point (10 pt in the atlas).
+    Other landforms (ranges, ridges, valleys, gaps …): Regular names centred on the point (7 pt), no marker.
+    Both have the atlas's 0.4 mm cream halo, centred lines, and per-feature priority (higher summits win).
+    """
+    k = geo["map_type_scale"]
+    layers = []
+    for name, subset, style, points in (("Summits", "\"cls\" = 'Summit'", "Heavy Italic", 10),
+                                        ("Ranges", "\"cls\" = 'Range'", "Regular", 7.5),
+                                        ("Place names", "\"cls\" NOT IN ('Summit', 'Range')", "Regular", 7)):
+        layer = QgsVectorLayer(path, name, "ogr")
+        if not layer.isValid():
+            print(f"skipping place names: can't open {path}")
+            return layers
+        layer.setSubsetString(subset)
+        if layer.featureCount() == 0:
+            continue
+        settings = QgsPalLayerSettings()
+        settings.fieldName = "label"
+        # ranges arrive as spaced capitals in the label text itself (see pipeline.place_names):
+        # QFont letter spacing makes QGIS drop labels altogether, point labels included
+        settings.setFormat(atlas_format(body_family, style, points * k, PLACE_INK, 0.4 * k))
+        settings.multilineAlign = Qgis.LabelMultiLineAlignment.Center
+        settings.dataDefinedProperties().setProperty(QgsPalLayerSettings.Property.Priority,
+                                                     QgsProperty.fromField("priority"))
+        if name == "Summits":
+            marker = QgsMarkerSymbol.createSimple({"name": "triangle", "color": PLACE_INK.name(),
+                                                   "outline_color": PLACE_INK.name(),
+                                                   "outline_width": f"{0.2 * k:.3f}", "size": f"{2.6 * k:.3f}",
+                                                   "size_unit": "MM", "outline_width_unit": "MM"})
+            layer.setRenderer(QgsSingleSymbolRenderer(marker))
+            settings.placement = Qgis.LabelPlacement.AroundPoint
+            settings.dist = 1.5 * k
+            settings.distUnits = Qgis.RenderUnit.Millimeters
+        elif name == "Ranges":
+            # beside the point, never on it: a range's point is usually its highest summit
+            layer.setRenderer(QgsNullSymbolRenderer())
+            settings.placement = Qgis.LabelPlacement.AroundPoint
+            settings.dist = 4 * k
+            settings.distUnits = Qgis.RenderUnit.Millimeters
+        else:
+            layer.setRenderer(QgsNullSymbolRenderer())
+            settings.placement = Qgis.LabelPlacement.OverPoint
+        layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+        layer.setLabelsEnabled(True)
+        project.addMapLayer(layer)
+        layers.append(layer)
+    return layers
+
+
 def build(spec: dict) -> dict:
     frame, legend = spec["frame"], spec["legend"]
     geo = print_spec.layout(frame["page"], frame["landscape"])
@@ -273,7 +352,8 @@ def build(spec: dict) -> dict:
     map_item = QgsLayoutItemMap(layout)
     map_item.setCrs(crs)
     names = river_label_layers(project, spec["labels"], geo, body_family) if spec.get("labels") else []
-    map_item.setLayers([*names, layer])   # first = drawn on top
+    places = place_name_layers(project, spec["places"], geo, body_family) if spec.get("places") else []
+    map_item.setLayers([*places, *names, layer])   # first = drawn on top
     map_item.setKeepLayerSet(True)
     layout.addLayoutItem(map_item)
     place(map_item, geo["map"])
@@ -287,12 +367,14 @@ def build(spec: dict) -> dict:
     map_item.setFrameStrokeWidth(QgsLayoutMeasurement(geo["stroke"], MM))
     map_item.setBackgroundColor(QColor("white"))
 
-    # --- title block
+    # --- title block: centred capitals like the 14ers atlas (High Alpine navy over a slate subtitle)
     t = geo["type"]
-    add_label(layout, spec["title"], text_format(title_family, "Regular", t["title"]), geo["title"],
-              valign=Qt.AlignmentFlag.AlignBottom)
+    centre = Qt.AlignmentFlag.AlignHCenter
+    add_label(layout, spec["title"].upper(), text_format(title_family, "Regular", t["title"], NAVY), geo["title"],
+              halign=centre, valign=Qt.AlignmentFlag.AlignBottom)
     if spec.get("subtitle"):
-        add_label(layout, spec["subtitle"], text_format(body_family, "Book", t["subtitle"], MUTED), geo["subtitle"])
+        add_label(layout, spec["subtitle"].upper(), text_format(body_family, "Regular", t["subtitle"], SLATE),
+                  geo["subtitle"], halign=centre)
 
     # --- legend: colour ramp in feet (smooth gradient, or one box per class for stepped ramps)
     lx, ly, lw, lh = geo["legend"]
@@ -312,17 +394,23 @@ def build(spec: dict) -> dict:
     add_scalebar(layout, map_item, (sx, sy + sh / 2, sw, sh / 2), frame["scale"], "km", sb_fmt, 0.9 * u, 4.5 * u)
 
     north = QgsLayoutItemPicture(layout)
-    north.setPicturePath(os.path.join(HERE, "static", "north_arrow.svg"))
+    north.setPicturePath(os.path.join(HERE, "static", "north_arrow_svelte.svg"))   # the atlas needle
     north.setResizeMode(QgsLayoutItemPicture.ResizeMode.Zoom)
     north.setLinkedMap(map_item)
     north.setNorthMode(QgsLayoutItemPicture.NorthMode.TrueNorth)
     layout.addLayoutItem(north)
     place(north, geo["north"])
 
-    add_label(layout, f"Scale 1:{frame['scale']:,}", text_format(body_family, "Medium", t["label"]),
+    logo = QgsLayoutItemPicture(layout)
+    logo.setPicturePath(os.path.join(HERE, "static", "ridgeline_logo.png"))
+    logo.setResizeMode(QgsLayoutItemPicture.ResizeMode.Zoom)
+    layout.addLayoutItem(logo)
+    place(logo, geo["logo"])
+
+    add_label(layout, f"1 : {frame['scale']:,}", text_format(body_family, "Regular", t["label"], SLATE),
               geo["scale_text"], halign=Qt.AlignmentFlag.AlignRight)
-    add_label(layout, spec["credits"], text_format(body_family, "Book", t["credits"], MUTED),
-              geo["credits"], valign=Qt.AlignmentFlag.AlignBottom)
+    add_label(layout, spec["credits"], text_format(body_family, "Regular", t["credits"], SLATE),
+              geo["credits"], halign=centre, valign=Qt.AlignmentFlag.AlignBottom)
 
     # --- export
     out_dir, base = spec["out_dir"], spec["basename"]

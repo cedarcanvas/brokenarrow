@@ -157,6 +157,9 @@
           <option value="river" selected>This river</option><option value="all">All named streams</option>
         </select></div>
     </div>
+    <label style="display:flex;gap:6px;align-items:center">
+      <input type="checkbox" id="places" checked> Place names: summits, ridges, valleys (USGS GNIS)
+    </label>
     <div id="frame-info" class="muted" style="margin-top:8px"></div>
   </section>
 
@@ -540,7 +543,8 @@ function rampParams() {
            ramp_invert: $("ramp-invert").checked ? 1 : 0 };
 }
 function labelParams() {
-  return { label_color: $("label-color").value, label_scope: $("label-scope").value };
+  return { label_color: $("label-color").value, label_scope: $("label-scope").value,
+           places: $("places").checked ? 1 : 0 };
 }
 function setRampStyle(style) {
   ramp.style = style;
@@ -682,6 +686,7 @@ function applyRampSettings(job) {
   $("ramp-invert").checked = !!r.invert;
   $("label-color").value = (job.labels && job.labels.color) || "auto";
   $("label-scope").value = (job.labels && job.labels.scope) || "river";
+  $("places").checked = job.places !== false;
   if (r.steps && [...$("ramp-steps").options].some((o) => +o.value === r.steps)) $("ramp-steps").value = r.steps;
   $("ramp-units").value = r.units || "ft";
   for (const s of document.querySelectorAll(".unit")) s.textContent = $("ramp-units").value;

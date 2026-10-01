@@ -17,6 +17,7 @@ import json
 import math
 import os
 import random
+import re
 import shutil
 import socket
 import subprocess
@@ -168,10 +169,14 @@ def _cached_lines(bbox: tuple) -> tuple[list, str] | None:
     w, s, e, n = bbox
     hits = []
     for name in os.listdir(CACHE_DIR):
+        if name.startswith("gnis_") or not name.endswith(".json"):   # place-name caches share this folder
+            continue
         try:
             with open(os.path.join(CACHE_DIR, name)) as f:
                 cached = json.load(f)
         except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(cached, dict) or "features" not in cached:
             continue
         cw, cs, ce, cn = cached.get("bbox", (0, 0, 0, 0))
         if cw <= w and cs <= s and ce >= e and cn >= n:
@@ -705,8 +710,10 @@ def make_print(spec: dict, out_dir: str) -> dict:
     proc = subprocess.run([exe, script, spec_path], env=env, capture_output=True, text=True)
     for line in (proc.stdout + proc.stderr).splitlines():
         # harmless Qt/GDAL noise: font alias lookup, and QGIS trying to write georeferencing into the PNG
+        # (and a GPKG handle closed late at exit when two layers share places.gpkg; outputs are complete by then)
         if line.strip() and not line.startswith(("Could not find platform", "QStandardPaths", "qt.qpa.fonts",
-                                                 "ERROR 6: The PNG driver")):
+                                                 "ERROR 6: The PNG driver",
+                                                 "ERROR 1: In GetNextRawFeature(): sqlite3_step()")):
             log(f"  qgis: {line}")
     if proc.returncode != 0:
         raise RuntimeError(f"QGIS print layout failed (exit {proc.returncode}); see log.")
@@ -719,6 +726,14 @@ RAMP_DEFAULTS = {"style": "smooth", "log": True, "steps": 12, "top": None, "unit
 LABEL_DEFAULTS = {"color": "auto", "scope": "river"}   # color: auto | white | black | off; scope: river | all
 LABEL_INKS = {"white": "#ffffff", "black": "#1d2a2f"}
 NOT_A_STREAM = ("ditch", "canal", "lateral", "drain", "flume", "pipeline", "aqueduct")
+
+# USGS GNIS landform names (The National Map). Major classes only, with label priority (higher wins).
+GNIS_LANDFORMS = "https://carto.nationalmap.gov/arcgis/rest/services/geonames/MapServer/5/query"
+# Ranges rank below the high summits: GNIS puts a range's point on its highest peak (the Sawatch
+# Range point is Mount Elbert), and the peak's own label matters more there.
+LANDFORM_PRIORITY = {"Range": 7, "Summit": 6, "Gap": 6, "Valley": 5, "Basin": 5, "Plateau": 5, "Plain": 5,
+                     "Ridge": 5, "Flat": 4, "Bench": 4, "Cliff": 4, "Glacier": 4, "Crater": 4}
+WITH_ELEVATION = ("Summit", "Gap")   # labelled "Name / 14,197 ft", as in the 14ers atlas
 
 
 def make_viz(dem: str, rem_tif: str, out_dir: str, cmap: str, table_path: str,
@@ -789,6 +804,108 @@ def label_layers(out_dir: str, manifest: dict, scope: str) -> list[dict]:
     return layers
 
 
+def _gnis_landforms(bbox: tuple) -> list[dict]:
+    """GNIS landform points in bbox (EPSG:4326), cached per bbox like the river lines."""
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    key = hashlib.sha1(("gnis:" + ",".join(f"{v:.5f}" for v in bbox)).encode()).hexdigest()[:16]
+    path = os.path.join(CACHE_DIR, f"gnis_{key}.json")
+    if os.path.exists(path):
+        with open(path) as f:
+            return json.load(f)
+    w, s, e, n = bbox
+    out, offset = [], 0
+    while True:
+        params = {"geometry": json.dumps({"xmin": w, "ymin": s, "xmax": e, "ymax": n}),
+                  "geometryType": "esriGeometryEnvelope", "inSR": 4326, "spatialRel": "esriSpatialRelIntersects",
+                  "outFields": "gaz_id,gaz_name,gaz_featureclass", "returnGeometry": "true", "outSR": 4326,
+                  "f": "json", "resultOffset": offset, "resultRecordCount": 2000}
+        data = json.loads(http_get(GNIS_LANDFORMS, params, timeout=60, retries=2, busy_retries=2))
+        if "error" in data:
+            raise RuntimeError(f"GNIS error: {data['error']}")
+        for ft in data.get("features", []):
+            a, g = ft["attributes"], ft.get("geometry") or {}
+            pts = g.get("points") or ([[g["x"], g["y"]]] if "x" in g else [])
+            if pts and a.get("gaz_name"):
+                out.append({"id": a.get("gaz_id"), "name": a["gaz_name"], "cls": a.get("gaz_featureclass"),
+                            "lon": pts[0][0], "lat": pts[0][1]})
+        if not data.get("exceededTransferLimit"):
+            break
+        offset += len(data.get("features", []))
+    with open(path, "w") as f:
+        json.dump(out, f)
+    return out
+
+
+def place_names(out_dir: str, manifest: dict) -> str | None:
+    """Write places.gpkg (in the run's UTM zone) with the major named landforms inside the print frame.
+
+    Summits and gaps get their elevation from the run's DEM: the highest cell within ~60 m for
+    summits (GNIS points are often a little off the true top), the cell itself for gaps.
+    Fields: name, cls, elev_ft, label (what gets printed), priority.
+    """
+    import numpy as np
+    from pyproj import Transformer
+    from shapely.geometry import Point, shape
+    from shapely.ops import transform as shp_transform
+
+    frame = manifest["print_frame"]
+    epsg = frame["epsg"]
+    try:
+        found = _gnis_landforms(tuple(manifest["bbox"]))
+    except Exception as exc:
+        log(f"Place names unavailable ({exc}); printing without them")
+        return None
+    to_utm = Transformer.from_crs(4326, epsg, always_xy=True)
+    frame_utm = shp_transform(to_utm.transform, shape(frame["frame"]))
+    rows, seen_ids, kept = [], set(), []
+    with rasterio.open(os.path.join(out_dir, manifest["files"]["dem"])) as dem:
+        for p in found:
+            if p["cls"] not in LANDFORM_PRIORITY:
+                continue
+            # GNIS returns some features twice (e.g. once per county); keep one per id and per
+            # same name + class within 1 km. Strip editorial notes like "(not official)".
+            if p["id"] in seen_ids:
+                continue
+            seen_ids.add(p["id"])
+            name = re.sub(r"\s*\((?:not official|historical|subdivision)\)\s*$", "", p["name"], flags=re.I)
+            x, y = to_utm.transform(p["lon"], p["lat"])
+            if not frame_utm.contains(Point(x, y)):
+                continue
+            if any(n == name and c == p["cls"] and math.dist((x, y), xy) < 1000 for n, c, xy in kept):
+                continue
+            kept.append((name, p["cls"], (x, y)))
+            p = {**p, "name": name}
+            elev_ft = None
+            if p["cls"] in WITH_ELEVATION:
+                r = 60 if p["cls"] == "Summit" else 0
+                row, col = dem.index(x, y)
+                win = ((max(row - int(r / dem.res[1]), 0), row + int(r / dem.res[1]) + 1),
+                       (max(col - int(r / dem.res[0]), 0), col + int(r / dem.res[0]) + 1))
+                block = dem.read(1, window=win, masked=True)
+                if block.count():
+                    elev_ft = int(round(float(block.max() if r else block.mean()) / FT))
+            if p["cls"] == "Range":   # spaced capitals for regions: thin spaces between letters, wider between words
+                label = "\u2003".join("\u2009".join(word) for word in name.upper().split())
+            else:
+                label = name + (f"\n{elev_ft:,} ft" if elev_ft else "")
+            rows.append({"name": p["name"], "cls": p["cls"], "elev_ft": elev_ft, "label": label,
+                         "priority": LANDFORM_PRIORITY[p["cls"]], "geometry": Point(x, y)})
+    if not rows:
+        log("No named landforms in this frame")
+        return None
+    gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs=f"EPSG:{epsg}")
+    # higher summits outrank lower ones when labels compete for space
+    summits = gdf["cls"] == "Summit"
+    if summits.sum() > 1:
+        rank = gdf.loc[summits, "elev_ft"].fillna(0).rank(pct=True)
+        gdf.loc[summits, "priority"] = (6 + np.round(rank * 3)).astype(int)
+    path = os.path.join(out_dir, "places.gpkg")
+    gdf.to_file(path, driver="GPKG")
+    counts = gdf["cls"].value_counts()
+    log("Place names: " + ", ".join(f"{n} {c.lower()}{'s' if n > 1 else ''}" for c, n in counts.items()))
+    return os.path.abspath(path)
+
+
 def label_ink(choice: str, legend: dict) -> str | None:
     """Label colour: white or black, or 'auto' = whichever contrasts with the ramp's colour at the river."""
     if choice == "off":
@@ -801,7 +918,8 @@ def label_ink(choice: str, legend: dict) -> str | None:
 
 
 def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict,
-                  title: str | None, subtitle: str | None, make_pdf: bool, label_opts: dict | None = None) -> None:
+                  title: str | None, subtitle: str | None, make_pdf: bool, label_opts: dict | None = None,
+                  places: bool | None = None) -> None:
     """Colour the REM, then build the map preview and print layout. Used by run() and restyle()."""
     files = manifest["files"]
     dem, rem_tif = os.path.join(out_dir, files["dem"]), os.path.join(out_dir, files["rem"])
@@ -820,7 +938,8 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
     title = title or manifest.get("title") or manifest["river"]
     subtitle = subtitle if subtitle is not None else manifest.get("subtitle", "River Relative Elevation Model")
     labels = {**LABEL_DEFAULTS, **(manifest.get("labels") or {}), **(label_opts or {})}
-    save(step="viz", cmap=cmap, ramp=opts, title=title, subtitle=subtitle, labels=labels)
+    places = manifest.get("places", True) if places is None else places
+    save(step="viz", cmap=cmap, ramp=opts, title=title, subtitle=subtitle, labels=labels, places=places)
     viz_tif = make_viz(dem, rem_tif, out_dir, cmap, table_path)
 
     save(step="preview")
@@ -853,6 +972,7 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
             "subtitle": subtitle,
             "legend": legend,
             "labels": spec_labels,
+            "places": place_names(out_dir, manifest) if places else None,
             "credits": (f"Elevation: USGS 3DEP {manifest['res_m']:g} m  ·  River: {data}  ·  "
                         f"REM: RiverREM  ·  UTM {frame['epsg'] - 26900}N  ·  {datetime.now():%b %Y}"),
             # one set of print files per colour style, so restyles don't overwrite each other
@@ -881,7 +1001,7 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
         bbox: tuple | None = None, stretch: dict | None = None, corridor_m: float = 1500,
         page: str = "11x17", orientation: str = "auto", title: str | None = None,
         subtitle: str | None = None, make_pdf: bool = True, ramp_opts: dict | None = None,
-        label_opts: dict | None = None) -> dict:
+        label_opts: dict | None = None, places: bool | None = None) -> dict:
     """Generate a REM and print layout for `river`, framed on a drawn bbox or a stretch (GeoJSON, EPSG:4326).
 
     ramp_opts: style, log, steps, top, units, first (see ramp()); top=None uses RiverREM's automatic top.
@@ -938,7 +1058,7 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
         if stretch:
             manifest["files"]["stretch"] = "stretch.geojson"
 
-        style_outputs(out_dir, manifest, save, cmap, ramp_opts or {}, title, subtitle, make_pdf, label_opts)
+        style_outputs(out_dir, manifest, save, cmap, ramp_opts or {}, title, subtitle, make_pdf, label_opts, places)
         save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"))
         log(f"Done: {out_dir}")
     except Exception as exc:
@@ -950,7 +1070,7 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
 
 def restyle(out_dir: str, cmap: str | None = None, ramp_opts: dict | None = None,
             title: str | None = None, subtitle: str | None = None, make_pdf: bool = True,
-            label_opts: dict | None = None) -> dict:
+            label_opts: dict | None = None, places: bool | None = None) -> dict:
     """Recolour a finished run and rebuild its preview and print, reusing its DEM and REM (no download).
 
     Options left as None keep the run's previous values.
@@ -977,7 +1097,7 @@ def restyle(out_dir: str, cmap: str | None = None, ramp_opts: dict | None = None
          restyled=datetime.now().isoformat(timespec="seconds"))
     try:
         log(f"Recolouring {os.path.basename(out_dir)} (reusing its DEM and REM)")
-        style_outputs(out_dir, manifest, save, cmap, opts, title, subtitle, make_pdf, label_opts)
+        style_outputs(out_dir, manifest, save, cmap, opts, title, subtitle, make_pdf, label_opts, places)
         save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"))
         log("Done")
     except Exception as exc:
@@ -1005,6 +1125,8 @@ def add_ramp_args(sp, keep: bool = False) -> None:
                     help="river name labels on the print; auto picks white or black to contrast with the river")
     sp.add_argument("--label-scope", default=d("river"), choices=("river", "all"),
                     help="label just the mapped river, or all named streams in the frame")
+    sp.add_argument("--places", default=d(True), action=argparse.BooleanOptionalAction,
+                    help="print names of major landforms (summits, ridges, valleys …) from USGS GNIS")
 
 
 def ramp_from_args(args) -> dict:
@@ -1082,7 +1204,7 @@ def main() -> int:
         return 0
     if args.cmd == "restyle":
         restyle(args.run, args.cmap, ramp_from_args(args), args.title, args.subtitle, not args.no_print,
-                labels_from_args(args))
+                labels_from_args(args), args.places)
         return 0
 
     stretch, river = None, args.river
@@ -1102,7 +1224,7 @@ def main() -> int:
     run(river, args.res, args.cmap, args.out, bbox=tuple(args.bbox) if args.bbox else None,
         stretch=stretch, corridor_m=args.corridor, page=args.page, orientation=args.orientation,
         title=args.title, subtitle=args.subtitle, make_pdf=not args.no_print, ramp_opts=ramp_from_args(args),
-        label_opts=labels_from_args(args))
+        label_opts=labels_from_args(args), places=args.places)
     return 0
 
 

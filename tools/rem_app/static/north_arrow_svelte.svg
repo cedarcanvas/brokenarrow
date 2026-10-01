@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Slender two-tone north needle for the 14ers atlas (16 × 24 mm item).
+     Navy #002868 to match the title type; the "N" is stroked, not set in a
+     font, so it renders identically everywhere. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16mm" height="24mm" viewBox="0 0 16 24">
+  <!-- N -->
+  <path d="M6.6 5.2 V1.0 L9.4 5.2 V1.0" fill="none" stroke="#002868"
+        stroke-width="0.5" stroke-linejoin="miter" stroke-linecap="butt"/>
+  <!-- needle: left half solid, right half open -->
+  <path d="M8 6.6 L6.1 23.2 L8 21.0 Z" fill="#002868"/>
+  <path d="M8 6.6 L9.9 23.2 L8 21.0 Z" fill="#ffffff" stroke="#002868"
+        stroke-width="0.22" stroke-linejoin="miter"/>
+  <path d="M8 6.6 L6.1 23.2 L8 21.0 Z" fill="none" stroke="#002868"
+        stroke-width="0.22" stroke-linejoin="miter"/>
+</svg>
