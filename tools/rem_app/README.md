@@ -44,6 +44,8 @@ Opens http://127.0.0.1:5057.
      uses RiverREM's automatic top (half the highest point above the river). Lowering it
      (e.g. 60–100 m) spends the colors on the valley floor rather than the ridges.
    - **Units**: feet or metres, for these fields and the print legend.
+   - **Invert colors**: runs the ramp backwards (e.g. a pale, glowing river against dark
+     high ground). Works with any palette.
    - The strip under the controls previews the bands and labels. With an automatic top it
      assumes 500 ft / 150 m, because the real top is only known once the REM is computed.
    Smooth + Logarithmic + automatic top matches RiverREM's default look.
@@ -59,9 +61,14 @@ Opens http://127.0.0.1:5057.
 
 Built headless with the newest installed QGIS (override with `QGIS_APP=/Applications/….app`):
 
-- Title in **High Alpine**; everything else in **Neue Frutiger World** (Book / Medium).
+- Title in **High Alpine**; everything else in **Neue Frutiger World** (Book / Medium;
+  river names in Book Italic).
   If a font isn't available (e.g. Adobe Fonts deactivated) **Helvetica** is used instead;
   `job.json` records which fonts were used.
+- **River labels** (Print section): small italic names along the channel, no halo. *Auto*
+  picks white or black to contrast with the ramp's color at the river; or force White /
+  Black, or Off. *This river* or *All named streams* (ditches and canals left out).
+  Connected segments are merged so each river gets a few labels, repeated along long reaches.
 - Map rotated to the frame, color legend (feet or metres) matching the map colors, scale bars
   in miles and kilometres, a north arrow that turns with the map, scale, and data credits.
 - Type, margins and line weights scale with the page, so every size has the same look.
@@ -81,6 +88,7 @@ Each run is saved to `river_rem_runs/<timestamp>_<river>_<res>m/`:
 | `stretch.geojson` | stretch mode: traced stretch |
 | `color_table.txt` | the gdaldem color table used to color the REM (latest style) |
 | `.hillshade/` | saved hillshade, reused when recoloring |
+| `streams.gpkg` | other named streams in the frame, when labelling all streams |
 | `print_spec.json` | everything passed to the layout script |
 | `job.json`, `run.log` | parameters, status, log |
 
@@ -105,7 +113,7 @@ conda run -n rem_env python tools/rem_app/pipeline.py run --start -106.150 38.87
 
 # recolor an existing run without downloading again; options left out keep the run's values
 conda run -n rem_env python tools/rem_app/pipeline.py restyle --run river_rem_runs/<run> \
-    --cmap rocket --first 3
+    --cmap rocket --first 3 --invert --labels auto --label-scope all
 ```
 
 ## Notes

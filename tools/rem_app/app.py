@@ -189,12 +189,27 @@ def parse_ramp(src) -> dict:
     first = height("ramp_first", "Lowest band", 0.1, 5000)
     if first is not None and top is not None and first >= top:
         abort(400, "Lowest band must be smaller than the top of the ramp.")
-    return {"style": style, "log": log, "steps": steps, "top": top, "units": units, "first": first}
+    invert = str(src.get("ramp_invert", "0")).lower() in ("1", "true", "yes")
+    return {"style": style, "log": log, "steps": steps, "top": top, "units": units, "first": first, "invert": invert}
+
+
+def parse_labels(src) -> dict:
+    color, scope = str(src.get("label_color", "auto")), str(src.get("label_scope", "river"))
+    if color not in ("auto", "white", "black", "off"):
+        abort(400, "River labels must be auto, white, black or off.")
+    if scope not in ("river", "all"):
+        abort(400, "Label scope must be river or all.")
+    return {"color": color, "scope": scope}
+
+
+def label_cli_args(opts: dict) -> list[str]:
+    return ["--labels", opts["color"], "--label-scope", opts["scope"]]
 
 
 def ramp_cli_args(opts: dict) -> list[str]:
     return ["--ramp", opts["style"], "--spacing", "log" if opts["log"] else "linear", "--steps", str(opts["steps"]),
-            "--units", opts["units"], "--top", str(opts["top"] or "auto"), "--first", str(opts["first"] or "auto")]
+            "--units", opts["units"], "--top", str(opts["top"] or "auto"), "--first", str(opts["first"] or "auto"),
+            "--invert" if opts["invert"] else "--no-invert"]
 
 
 @app.get("/api/ramp")
@@ -203,7 +218,8 @@ def ramp_preview():
     opts = parse_ramp(request.args)
     try:
         legend = pipeline.ramp(request.args.get("cmap", "mako"), opts["top"] or PREVIEW_TOP[opts["units"]],
-                               opts["style"], opts["log"], opts["steps"], opts["units"], opts["first"])["legend"]
+                               opts["style"], opts["log"], opts["steps"], opts["units"], opts["first"],
+                               opts["invert"])["legend"]
     except ValueError as exc:
         abort(400, str(exc))
     legend["auto_top"] = opts["top"] is None
@@ -260,6 +276,7 @@ def create_job():
         abort(400, "res must be 1, 3, 10 or 30")
     page, orientation = parse_print(body)
     ramp_opts = parse_ramp(body)
+    label_opts = parse_labels(body)
     frame = frame_for(body, stretch)
     bbox = tuple(frame["bbox"])
     if any(p.poll() is None for p in procs.values()):
@@ -274,7 +291,7 @@ def create_job():
     os.makedirs(out, exist_ok=True)
     args = [sys.executable, "-u", os.path.join(HERE, "pipeline.py"), "run", "--river", river,
             "--res", str(res), "--cmap", cmap, "--out", out, "--page", page, "--orientation", orientation,
-            "--title", title, "--subtitle", subtitle, *ramp_cli_args(ramp_opts)]
+            "--title", title, "--subtitle", subtitle, *ramp_cli_args(ramp_opts), *label_cli_args(label_opts)]
     if stretch:
         stretch_path = os.path.join(out, "stretch_input.geojson")
         with open(stretch_path, "w") as f:
@@ -301,7 +318,8 @@ def restyle_job(job_id):
     body = request.get_json(force=True)
     ramp_opts = parse_ramp(body)
     args = [sys.executable, "-u", os.path.join(HERE, "pipeline.py"), "restyle", "--run", out,
-            "--cmap", str(body.get("cmap", job.get("cmap", "mako"))), *ramp_cli_args(ramp_opts)]
+            "--cmap", str(body.get("cmap", job.get("cmap", "mako"))), *ramp_cli_args(ramp_opts),
+            *label_cli_args(parse_labels(body))]
     for key in ("title", "subtitle"):
         if body.get(key) is not None:
             args += [f"--{key}", str(body[key]).strip()[:160]]

@@ -28,6 +28,10 @@ from qgis.core import (
     QgsLayoutPoint,
     QgsLayoutSize,
     QgsLineSymbol,
+    QgsNullSymbolRenderer,
+    QgsPalLayerSettings,
+    QgsVectorLayer,
+    QgsVectorLayerSimpleLabeling,
     QgsPrintLayout,
     QgsProject,
     QgsRasterLayer,
@@ -210,6 +214,41 @@ def draw_stepped_legend(layout, legend, bar, tick_fmt, geo):
     add_ticks(layout, labels, bar, tick_fmt, geo)
 
 
+def river_label_layers(project, labels: dict, geo: dict, body_family: str) -> list:
+    """Invisible line layers that print stream names along the channel, small italic, no halo.
+
+    Connected segments are merged so a river split into many NHD pieces gets a few labels rather
+    than one per piece; long rivers repeat the name. Higher priority wins label conflicts.
+    """
+    u = geo["unit"]
+    # No extra letter spacing: QFont percentage spacing makes QGIS silently drop curved labels
+    fmt = text_format(body_family, "Book Italic", geo["type"]["river"], QColor(labels["color"]))
+    layers = []
+    for i, entry in enumerate(labels["layers"]):
+        layer = QgsVectorLayer(entry["path"], "River names" if i == 0 else "Stream names", "ogr")
+        if not layer.isValid():
+            print(f"skipping labels: can't open {entry['path']}")
+            continue
+        layer.setRenderer(QgsNullSymbolRenderer())   # names only; the REM already shows the channel
+        settings = QgsPalLayerSettings()
+        settings.fieldName = "gnis_name"
+        settings.placement = Qgis.LabelPlacement.Curved
+        settings.priority = entry["priority"]
+        settings.setFormat(fmt)
+        settings.repeatDistance = 80 * u
+        settings.repeatDistanceUnit = Qgis.RenderUnit.Millimeters
+        settings.maxCurvedCharAngleIn = settings.maxCurvedCharAngleOut = 20   # skip spots too tight to read
+        line = settings.lineSettings()
+        line.setPlacementFlags(Qgis.LabelLinePlacementFlag.OnLine)
+        line.setMergeLines(True)
+        settings.setLineSettings(line)
+        layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+        layer.setLabelsEnabled(True)
+        project.addMapLayer(layer)
+        layers.append(layer)
+    return layers
+
+
 def build(spec: dict) -> dict:
     frame, legend = spec["frame"], spec["legend"]
     geo = print_spec.layout(frame["page"], frame["landscape"])
@@ -233,7 +272,8 @@ def build(spec: dict) -> dict:
     # --- map: rotated so the river runs along the page, at the frame's nice scale
     map_item = QgsLayoutItemMap(layout)
     map_item.setCrs(crs)
-    map_item.setLayers([layer])
+    names = river_label_layers(project, spec["labels"], geo, body_family) if spec.get("labels") else []
+    map_item.setLayers([*names, layer])   # first = drawn on top
     map_item.setKeepLayerSet(True)
     layout.addLayoutItem(map_item)
     place(map_item, geo["map"])
