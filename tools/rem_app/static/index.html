@@ -40,6 +40,8 @@
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .muted { color: var(--muted); font-size: 12.5px; }
   label { display: block; font-size: 12.5px; color: var(--muted); margin: 8px 0 3px; }
+  input[type=text] { width: 100%; font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line);
+                     background: var(--panel); color: var(--ink); }
   select { width: 100%; font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line);
            background: var(--panel); color: var(--ink); }
   ul.list { list-style: none; margin: 6px 0 0; padding: 0; max-height: 220px; overflow-y: auto;
@@ -97,13 +99,12 @@
         <button id="btn-pick" class="primary">Click start &amp; end</button>
         <button id="btn-clear-stretch" disabled>Clear</button>
       </div>
-      <label for="corridor">Corridor width (each side of the river)</label>
+      <label for="corridor">Show at least this much each side of the river</label>
       <select id="corridor">
         <option value="500">500 m</option><option value="1000">1 km</option>
         <option value="1500" selected>1.5 km</option><option value="2000">2 km</option>
         <option value="3000">3 km</option><option value="5000">5 km</option>
       </select>
-      <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="clip" checked> Clip output to the corridor</label>
     </div>
     <div id="box-ui" hidden>
       <div class="row">
@@ -123,8 +124,26 @@
     </div>
   </section>
 
+  <section id="s-print">
+    <h2><span class="num">3</span>Print</h2>
+    <div class="row" style="flex-wrap:nowrap">
+      <div style="flex:1"><label for="page">Page</label><select id="page"></select></div>
+      <div style="flex:1"><label for="orientation">Layout</label>
+        <select id="orientation">
+          <option value="auto" selected>Auto</option>
+          <option value="horizontal">Horizontal</option>
+          <option value="vertical">Vertical</option>
+        </select></div>
+    </div>
+    <label for="title">Title</label>
+    <input id="title" type="text" maxlength="120" placeholder="River name">
+    <label for="subtitle">Subtitle</label>
+    <input id="subtitle" type="text" maxlength="160" value="River Relative Elevation Model">
+    <div id="frame-info" class="muted" style="margin-top:8px"></div>
+  </section>
+
   <section id="s-settings">
-    <h2><span class="num">3</span>Settings</h2>
+    <h2><span class="num">4</span>Settings</h2>
     <label for="res">DEM resolution</label>
     <select id="res">
       <option value="1">1 m (lidar)</option>
@@ -142,7 +161,7 @@
   </section>
 
   <section id="s-run">
-    <h2><span class="num">4</span>Generate</h2>
+    <h2><span class="num">5</span>Generate</h2>
     <button id="btn-run" class="primary" disabled>Generate REM</button>
     <div id="run-msg" class="muted" style="margin-top:8px"></div>
     <div id="progress" hidden>
@@ -176,12 +195,12 @@
 const $ = (id) => document.getElementById(id);
 const STEPS = [["centerline", "Fetching NHD centerline"], ["dem", "Downloading 3DEP elevation"],
                ["rem", "Interpolating river surface"], ["viz", "Shading and coloring"],
-               ["preview", "Building map preview"], ["done", "Done"]];
+               ["preview", "Building map preview"], ["print", "Building print layout"], ["done", "Done"]];
 const DITCH = /ditch|canal|lateral|drain|flume/i;
 
 const state = { mode: "stretch", bbox: null, rect: null, rivers: [], riverLayer: null, selected: null,
                 estimate: null, jobId: null, overlay: null, poll: null,
-                picking: 0, pins: [], stretch: null, stretchLayer: null, corridorLayer: null, traceSeq: 0 };
+                picking: 0, pins: [], stretch: null, stretchLayer: null, frame: null, frameLayer: null, traceSeq: 0, frameSeq: 0 };
 const HINTS = { draw: "Drag to draw the area · Esc to cancel", start: "Click the start of the stretch · Esc to cancel",
                 end: "Click the end of the stretch · Esc to cancel" };
 
@@ -267,8 +286,9 @@ map.on("click", (e) => {
 });
 
 function clearStretch() {
-  for (const l of [...state.pins, state.stretchLayer, state.corridorLayer]) if (l) map.removeLayer(l);
-  Object.assign(state, { picking: 0, pins: [], stretch: null, stretchLayer: null, corridorLayer: null });
+  for (const l of [...state.pins, state.stretchLayer]) if (l) map.removeLayer(l);
+  clearFrame();
+  Object.assign(state, { picking: 0, pins: [], stretch: null, stretchLayer: null });
   if (state.mode === "stretch") Object.assign(state, { bbox: null, selected: null, estimate: null });
   $("btn-pick").classList.remove("active");
   $("btn-clear-stretch").disabled = true;
@@ -287,14 +307,14 @@ async function traceStretch() {
   Object.assign(state, { bbox: null, selected: null, stretch: null });
   updateRunButton();
   const res = await api("/api/trace", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ start: [a.lng, a.lat], end: [b.lng, b.lat], corridor_m: +$("corridor").value }) }, true, true);
+    body: JSON.stringify(Object.assign({ start: [a.lng, a.lat], end: [b.lng, b.lat] }, frameParams())) }, true, true);
   if (seq !== state.traceSeq) return;  // pins moved again while tracing
   if (res.error) {
     $("area-info").innerHTML = `<span class="err"></span> <a href="#" id="retry-trace">Retry</a>`;
     $("area-info").firstChild.textContent = res.error;
     $("retry-trace").onclick = (e) => { e.preventDefault(); traceStretch(); };
     if (state.stretchLayer) map.removeLayer(state.stretchLayer);
-    if (state.corridorLayer) map.removeLayer(state.corridorLayer);
+    clearFrame();
     return;
   }
   state.stretch = res.stretch;
@@ -306,8 +326,10 @@ async function traceStretch() {
   const coords = res.stretch.coordinates;
   state.pins[0].setLatLng([coords[0][1], coords[0][0]]);
   state.pins[1].setLatLng([coords.at(-1)[1], coords.at(-1)[0]]);
-  applyCorridor(res);
-  map.fitBounds(state.corridorLayer.getBounds(), { padding: [30, 30] });
+  state.bbox = res.frame.bbox;
+  applyFrame(res.frame);
+  map.fitBounds(state.frameLayer.getBounds(), { padding: [30, 30] });
+  $("title").placeholder = res.river;
   $("s-area").classList.add("done"); $("s-river").classList.add("done");
   const src = res.source === "OSM" ? "OpenStreetMap (USGS NHD was unavailable)" : "USGS NHD";
   $("river-info").innerHTML = `<b></b> <span></span>`;
@@ -315,24 +337,44 @@ async function traceStretch() {
   $("river-info").children[1].textContent = `· ${res.length_km} km stretch · Source: ${src}`;
 }
 
-function applyCorridor(res) {
-  state.bbox = res.bbox;
-  state.estimate = res.estimate;
-  if (state.corridorLayer) map.removeLayer(state.corridorLayer);
-  state.corridorLayer = L.geoJSON(res.corridor, { style: { color: getCss("--river-sel"), weight: 1.5, dashArray: "6 4",
+// ---------- print frame (the rotated rectangle the page will show)
+function frameParams() {
+  return { corridor_m: +$("corridor").value, page: $("page").value, orientation: $("orientation").value };
+}
+
+function clearFrame() {
+  if (state.frameLayer) map.removeLayer(state.frameLayer);
+  Object.assign(state, { frame: null, frameLayer: null });
+  $("frame-info").textContent = "";
+}
+
+function applyFrame(frame) {
+  state.frame = frame;
+  state.estimate = frame.estimate;
+  if (state.frameLayer) map.removeLayer(state.frameLayer);
+  state.frameLayer = L.geoJSON(frame.frame, { style: { color: getCss("--river-sel"), weight: 1.5, dashArray: "6 4",
     fillOpacity: 0.06 }, interactive: false }).addTo(map);
   state.stretchLayer && state.stretchLayer.bringToFront();
-  const e = res.estimate.by_res["10"];
-  $("area-info").textContent = `Corridor ${e.width_km} × ${e.height_km} km · UTM EPSG:${e.epsg}`;
+  const km = (m) => (m / 1000).toFixed(1);
+  $("area-info").textContent = `Print frame ${km(frame.width_m)} × ${km(frame.height_m)} km · UTM EPSG:${frame.epsg}`;
+  const rot = Math.abs(frame.rotation) < 0.5 ? "north up" : `rotated ${Math.round(frame.rotation)}°`;
+  $("frame-info").textContent = `${$("page").selectedOptions[0].textContent} · ${frame.orientation} · ` +
+    `1:${frame.scale.toLocaleString()} · ${rot}`;
   updateResolution();
 }
 
-$("corridor").onchange = async () => {
-  if (!state.stretch) return;
-  const res = await api("/api/corridor", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stretch: state.stretch, corridor_m: +$("corridor").value }) });
-  if (res) applyCorridor(res);
-};
+async function refreshFrame() {
+  const body = frameParams();
+  if (state.mode === "stretch" && state.stretch) body.stretch = state.stretch;
+  else if (state.mode === "box" && state.bbox) body.bbox = state.bbox;
+  else return;
+  const seq = ++state.frameSeq;
+  const frame = await api("/api/frame", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body) });
+  if (frame && seq === state.frameSeq) applyFrame(frame);
+}
+for (const id of ["corridor", "page", "orientation"]) $(id).onchange = refreshFrame;
+
 map.on("mousedown", (e) => {
   if (!drawing) return;
   start = e.latlng;
@@ -355,6 +397,7 @@ $("btn-clear").onclick = clearArea;
 function clearArea() {
   if (state.rect) map.removeLayer(state.rect);
   if (state.riverLayer) map.removeLayer(state.riverLayer);
+  if (state.mode === "box") clearFrame();
   Object.assign(state, { bbox: null, rect: null, rivers: [], riverLayer: null, selected: null, estimate: null });
   $("btn-clear").disabled = true;
   resetInfo();
@@ -374,13 +417,7 @@ async function setArea(bounds) {
   if (state.riverLayer) { map.removeLayer(state.riverLayer); state.riverLayer = null; }
   updateRunButton();
   const bbox = state.bbox, q = `bbox=${bbox.join(",")}`;
-  api(`/api/estimate?${q}`).then((est) => {
-    if (!est || state.bbox !== bbox) return;
-    state.estimate = est;
-    const e = est.by_res["10"];
-    $("area-info").textContent = `${e.width_km} × ${e.height_km} km · UTM EPSG:${e.epsg}`;
-    updateResolution();
-  });
+  refreshFrame();
   const riv = await api(`/api/rivers?${q}`);
   if (state.bbox !== bbox) return;  // user redrew while NHD was loading
   if (riv) { state.rivers = riv.rivers; state.source = riv.source; drawRivers(riv.geojson); }
@@ -434,6 +471,7 @@ function selectRiver(name) {
   state.riverLayer && state.riverLayer.setStyle(riverStyle);
   state.riverLayer && state.riverLayer.eachLayer((l) => l.feature.properties.gnis_name === name && l.bringToFront());
   $("s-river").classList.add("done");
+  $("title").placeholder = name;
   renderRiverList();
   updateRunButton();
 }
@@ -469,8 +507,10 @@ $("btn-run").onclick = async () => {
   const res = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(Object.assign({ river: state.selected, res: +$("res").value, cmap: $("cmap").value },
       state.mode === "stretch"
-        ? { stretch: state.stretch, corridor_m: +$("corridor").value, clip: $("clip").checked }
-        : { bbox: state.bbox })) });
+        ? { stretch: state.stretch }
+        : { bbox: state.bbox },
+      frameParams(),
+      { title: $("title").value.trim() || state.selected, subtitle: $("subtitle").value.trim() })) });
   if (!res) return;
   watchJob(res.id);
 };
@@ -514,16 +554,18 @@ function showResult(job, fit) {
   $("result-title").innerHTML = `<b></b> <span class="muted"></span>`;
   $("result-title").children[0].textContent = job.river;
   $("result-title").children[1].textContent = `· ${job.res_m} m · ${job.cmap}` +
+    (job.scale ? ` · ${job.page} ${job.orientation} 1:${job.scale.toLocaleString()}` : "") +
     (job.centerline_source ? ` · ${job.centerline_source} centerline` : "");
   const f = job.files;
-  const links = [["Styled GeoTIFF", f.viz], ["Styled PNG", f.viz_png], ["REM GeoTIFF (raw)", f.rem],
+  const links = [["Print PDF", f.pdf], ["Print PNG (300 dpi)", f.png], ["QGIS project", f.qgz],
+                 ["Styled GeoTIFF", f.viz], ["Styled PNG", f.viz_png], ["REM GeoTIFF (raw)", f.rem],
                  ["DEM", f.dem], ["Centerline", f.centerline || "centerline.gpkg"],
-                 ["Stretch", f.stretch], ["Corridor", f.corridor]].filter(([, name]) => name);
+                 ["Stretch", f.stretch], ["Print frame", f.frame], ["Corridor", f.corridor]].filter(([, name]) => name);
   $("downloads").innerHTML = links.map(([t, name]) => `<a href="${base}${encodeURIComponent(name)}?dl=1">${t}</a>`).join("");
 }
 $("opacity").oninput = () => state.overlay && state.overlay.setOpacity(+$("opacity").value);
 $("show-lines").onchange = () => {
-  for (const layer of [state.riverLayer, state.rect, state.stretchLayer, state.corridorLayer, ...state.pins]) {
+  for (const layer of [state.riverLayer, state.rect, state.stretchLayer, state.frameLayer, ...state.pins]) {
     if (!layer) continue;
     $("show-lines").checked ? layer.addTo(map) : map.removeLayer(layer);
   }
@@ -568,6 +610,9 @@ async function api(url, opts = {}, quiet = false, returnError = false) {
   }
 }
 resetInfo();
+api("/api/pages", {}, true).then((pages) => {
+  for (const p of pages || []) $("page").add(new Option(p.label, p.id, false, p.id === "11x17"));
+});
 loadRuns();
 </script>
 </body>

@@ -37,6 +37,18 @@ def job_dir(job_id: str) -> str:
     return path
 
 
+def pid_alive(pid) -> bool:
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)   # signal 0: existence check only
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def read_job(job_id: str) -> dict:
     path = job_dir(job_id)
     try:
@@ -45,9 +57,12 @@ def read_job(job_id: str) -> dict:
     except (FileNotFoundError, json.JSONDecodeError):
         job = {"status": "running", "step": "starting"}
     proc = procs.get(job_id)
-    if job.get("status") == "running" and (proc is None or proc.poll() is not None):
-        # process exited (or server restarted) without the pipeline recording a result
-        if proc is None or proc.returncode != 0:
+    if job.get("status") == "running":
+        if proc is not None:
+            alive = proc.poll() is None
+        else:   # started by another server or from the command line: check the pipeline's pid
+            alive = pid_alive(job.get("pid"))
+        if not alive:
             job.update(status="error", error=job.get("error") or "Process exited unexpectedly; see log.")
     job["id"] = job_id
     return job
@@ -97,29 +112,57 @@ def estimate():
     return jsonify(estimates(parse_bbox(request.args.get("bbox"))))
 
 
+def parse_stretch(raw) -> dict:
+    stretch = raw or {}
+    if stretch.get("type") != "LineString" or len(stretch.get("coordinates", [])) < 2:
+        abort(400, "stretch must be a GeoJSON LineString")
+    return stretch
+
+
+def parse_print(body: dict) -> tuple[str, str]:
+    page, orientation = body.get("page", "11x17"), body.get("orientation", "auto")
+    if page not in pipeline.print_spec.PAGES:
+        abort(400, f"page must be one of {', '.join(pipeline.print_spec.PAGES)}")
+    if orientation not in ("auto", "horizontal", "vertical"):
+        abort(400, "orientation must be auto, horizontal or vertical")
+    return page, orientation
+
+
+def frame_for(body: dict, stretch: dict | None) -> dict:
+    """Print frame for a stretch or a drawn bbox, with resolution estimates for the DEM it needs."""
+    page, orientation = parse_print(body)
+    if stretch:
+        frame = pipeline.print_frame(page, orientation, stretch=stretch,
+                                     corridor_m=parse_corridor(body.get("corridor_m", 1500)))
+    else:
+        frame = pipeline.print_frame(page, orientation, bbox=parse_bbox(",".join(map(str, body.get("bbox", [])))))
+    frame["estimate"] = estimates(tuple(frame["bbox"]))
+    return frame
+
+
+@app.get("/api/pages")
+def pages():
+    return jsonify([{"id": k, "label": pipeline.print_spec.PAGE_LABELS[k]} for k in pipeline.print_spec.PAGES])
+
+
 @app.post("/api/trace")
 def trace():
     body = request.get_json(force=True)
     start, end = parse_point(body.get("start")), parse_point(body.get("end"))
-    corridor_m = parse_corridor(body.get("corridor_m", 1500))
     try:
         result = pipeline.trace_stretch(start, end, body.get("river") or None)
     except ValueError as exc:
         abort(400, str(exc))
-    poly, bbox = pipeline.corridor(result["stretch"], corridor_m)
-    result.update(corridor=poly, bbox=bbox, estimate=estimates(bbox))
+    result["frame"] = frame_for(body, result["stretch"])
     return jsonify(result)
 
 
-@app.post("/api/corridor")
-def corridor():
-    """Recompute corridor + estimates for an already-traced stretch (e.g. when the width changes)."""
+@app.post("/api/frame")
+def frame():
+    """Recompute the print frame (e.g. when page, orientation or corridor width changes)."""
     body = request.get_json(force=True)
-    stretch = body.get("stretch") or {}
-    if stretch.get("type") != "LineString" or len(stretch.get("coordinates", [])) < 2:
-        abort(400, "stretch must be a GeoJSON LineString")
-    poly, bbox = pipeline.corridor(stretch, parse_corridor(body.get("corridor_m", 1500)))
-    return jsonify({"corridor": poly, "bbox": bbox, "estimate": estimates(bbox)})
+    stretch = parse_stretch(body["stretch"]) if body.get("stretch") else None
+    return jsonify(frame_for(body, stretch))
 
 
 @app.get("/api/jobs")
@@ -137,18 +180,16 @@ def create_job():
     river = str(body.get("river", "")).strip()
     res = float(body.get("res", 10))
     cmap = str(body.get("cmap", "mako"))
-    stretch = body.get("stretch")
+    stretch = parse_stretch(body["stretch"]) if body.get("stretch") else None
+    title = str(body.get("title") or river).strip()[:120]
+    subtitle = str(body.get("subtitle", "River Relative Elevation Model")).strip()[:160]
     if not river:
         abort(400, "Pick a river first.")
     if res not in (1, 3, 10, 30):
         abort(400, "res must be 1, 3, 10 or 30")
-    if stretch:
-        if stretch.get("type") != "LineString" or len(stretch.get("coordinates", [])) < 2:
-            abort(400, "stretch must be a GeoJSON LineString")
-        corridor_m = parse_corridor(body.get("corridor_m", 1500))
-        _, bbox = pipeline.corridor(stretch, corridor_m)
-    else:
-        bbox = parse_bbox(",".join(str(v) for v in body.get("bbox", [])))
+    page, orientation = parse_print(body)
+    frame = frame_for(body, stretch)
+    bbox = tuple(frame["bbox"])
     if any(p.poll() is None for p in procs.values()):
         abort(409, "A REM is already running. Wait for it to finish.")
     mp = pipeline.estimate(bbox, res)["megapixels"]
@@ -160,16 +201,15 @@ def create_job():
     out = os.path.join(pipeline.RUNS_DIR, job_id)
     os.makedirs(out, exist_ok=True)
     args = [sys.executable, "-u", os.path.join(HERE, "pipeline.py"), "run", "--river", river,
-            "--res", str(res), "--cmap", cmap, "--out", out]
+            "--res", str(res), "--cmap", cmap, "--out", out, "--page", page, "--orientation", orientation,
+            "--title", title, "--subtitle", subtitle]
     if stretch:
         stretch_path = os.path.join(out, "stretch_input.geojson")
         with open(stretch_path, "w") as f:
             json.dump({"type": "Feature", "properties": {"river": river}, "geometry": stretch}, f)
-        args += ["--stretch", stretch_path, "--corridor", str(corridor_m)]
-        if not body.get("clip", True):
-            args.append("--no-clip")
+        args += ["--stretch", stretch_path, "--corridor", str(parse_corridor(body.get("corridor_m", 1500)))]
     else:
-        args += ["--bbox", *map(str, bbox)]
+        args += ["--bbox", *map(str, parse_bbox(",".join(map(str, body.get("bbox", [])))))]
     log = open(os.path.join(out, "run.log"), "w")
     procs[job_id] = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=out)
     return jsonify({"id": job_id}), 202
