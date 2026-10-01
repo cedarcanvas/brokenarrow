@@ -52,7 +52,7 @@ def layout(page: str, landscape: bool) -> dict:
         "credits": (m, ph - m - 1.8 * u, fw, 1.8 * u),
         # type sizes, as cap-ish heights in mm (converted to points in the layout script)
         "type": {"title": 6.0 * u, "subtitle": 2.2 * u, "label": 1.35 * u, "small": 1.05 * u,
-                 "credits": 0.9 * u},
+                 "credits": 0.9 * u, "river": 0.7 * u},
         "stroke": 0.12 * u,
     }
 

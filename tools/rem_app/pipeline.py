@@ -572,7 +572,7 @@ def _knee_for_first_band(top_m: float, first_m: float, steps: int) -> float | No
 
 
 def ramp(cmap: str, top: float, style: str = "smooth", log: bool = True, steps: int = 12,
-         units: str = "ft", first: float | None = None) -> dict:
+         units: str = "ft", first: float | None = None, invert: bool = False) -> dict:
     """Colour table (for gdaldem color-relief) and legend for the REM colour ramp.
 
     Heights (top, first and the legend) are in `units` ("ft" or "m"); the colour table is in metres.
@@ -590,7 +590,9 @@ def ramp(cmap: str, top: float, style: str = "smooth", log: bool = True, steps: 
         raise ValueError(f"ramp style must be one of {RAMP_STYLES}")
     if units not in UNITS:
         raise ValueError(f"units must be one of {tuple(UNITS)}")
-    cm = RasterViz._get_cm_mpl(cmap)
+    base_cm = RasterViz._get_cm_mpl(cmap)
+    # invert=True runs the colormap backwards (river gets the far end); works for any colormap
+    cm = (lambda k: base_cm(254 - k)) if invert else base_cm
     u = UNITS[units]
     top_m = top * u
     knee = 1.0
@@ -656,7 +658,7 @@ def ramp(cmap: str, top: float, style: str = "smooth", log: bool = True, steps: 
                 last = frac
         legend = {"mode": "smooth", "top": round(top, 2), "stops": stops, "ticks": ticks}
     table.append("nv 0 0 0")
-    legend.update(log=log, cmap=cmap, units=units, unit_name=UNIT_NAMES[units])
+    legend.update(log=log, cmap=cmap, invert=invert, units=units, unit_name=UNIT_NAMES[units])
     return {"table": "\n".join(table) + "\n", "legend": legend}
 
 
@@ -712,7 +714,11 @@ def make_print(spec: dict, out_dir: str) -> dict:
         return json.load(f)
 
 
-RAMP_DEFAULTS = {"style": "smooth", "log": True, "steps": 12, "top": None, "units": "ft", "first": None}
+RAMP_DEFAULTS = {"style": "smooth", "log": True, "steps": 12, "top": None, "units": "ft", "first": None,
+                 "invert": False}
+LABEL_DEFAULTS = {"color": "auto", "scope": "river"}   # color: auto | white | black | off; scope: river | all
+LABEL_INKS = {"white": "#ffffff", "black": "#1d2a2f"}
+NOT_A_STREAM = ("ditch", "canal", "lateral", "drain", "flume", "pipeline", "aqueduct")
 
 
 def make_viz(dem: str, rem_tif: str, out_dir: str, cmap: str, table_path: str,
@@ -755,25 +761,66 @@ def make_viz(dem: str, rem_tif: str, out_dir: str, cmap: str, table_path: str,
     return viz_tif
 
 
+def label_layers(out_dir: str, manifest: dict, scope: str) -> list[dict]:
+    """Line layers whose names are printed along the streams.
+
+    Always the mapped river (from the run's centerline, high priority); with scope "all", also the
+    other named streams in the frame (ditches and canals left out), at lower priority so the main
+    river wins any conflict. Uses the cached river lines, so no network is needed.
+    """
+    files, epsg = manifest["files"], manifest["print_frame"]["epsg"]
+    layers = [{"path": os.path.abspath(os.path.join(out_dir, files["centerline"])), "priority": 9}]
+    if scope != "all":
+        return layers
+    bbox = tuple(manifest["bbox"])
+    try:
+        lines, _ = named_lines(bbox)
+    except Exception as exc:
+        log(f"Couldn't load other streams for labels ({exc}); labelling the main river only")
+        return layers
+    names = lines["gnis_name"].str.lower()
+    lines = lines[(lines["gnis_name"] != manifest["river"]) & ~names.str.contains("|".join(NOT_A_STREAM))]
+    lines = lines.clip(bbox)
+    lines = lines[~lines.geometry.is_empty]
+    if not lines.empty:
+        path = os.path.join(out_dir, "streams.gpkg")
+        lines.to_crs(epsg).to_file(path, driver="GPKG")
+        layers.append({"path": os.path.abspath(path), "priority": 4})
+    return layers
+
+
+def label_ink(choice: str, legend: dict) -> str | None:
+    """Label colour: white or black, or 'auto' = whichever contrasts with the ramp's colour at the river."""
+    if choice == "off":
+        return None
+    if choice in LABEL_INKS:
+        return LABEL_INKS[choice]
+    lowest = legend["classes"][0][2] if legend["mode"] == "stepped" else legend["stops"][0][1]
+    r, g, b = (int(lowest[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    return LABEL_INKS["white" if 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5 else "black"]
+
+
 def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict,
-                  title: str | None, subtitle: str | None, make_pdf: bool) -> None:
+                  title: str | None, subtitle: str | None, make_pdf: bool, label_opts: dict | None = None) -> None:
     """Colour the REM, then build the map preview and print layout. Used by run() and restyle()."""
     files = manifest["files"]
     dem, rem_tif = os.path.join(out_dir, files["dem"]), os.path.join(out_dir, files["rem"])
     opts = {**RAMP_DEFAULTS, **ramp_opts}
     units = opts["units"]
     top = opts["top"] or rem_auto_top(rem_tif, units)
-    colors = ramp(cmap, top, opts["style"], opts["log"], opts["steps"], units, opts["first"])
+    colors = ramp(cmap, top, opts["style"], opts["log"], opts["steps"], units, opts["first"], opts["invert"])
     table_path = os.path.join(out_dir, "color_table.txt")
     with open(table_path, "w") as f:
         f.write(colors["table"])
     legend = colors["legend"]
-    log(f"Colour ramp: {cmap}, {opts['style']}, {'log' if legend['log'] else 'linear'}, top {top:,.0f} {units}"
+    log(f"Colour ramp: {cmap}{' inverted' if opts['invert'] else ''}, {opts['style']}, "
+        f"{'log' if legend['log'] else 'linear'}, top {top:,.0f} {units}"
         + (f", {len(legend['classes'])} classes from {legend['classes'][0][1]:g} {units}"
            if opts["style"] == "stepped" else ""))
     title = title or manifest.get("title") or manifest["river"]
     subtitle = subtitle if subtitle is not None else manifest.get("subtitle", "River Relative Elevation Model")
-    save(step="viz", cmap=cmap, ramp=opts, title=title, subtitle=subtitle)
+    labels = {**LABEL_DEFAULTS, **(manifest.get("labels") or {}), **(label_opts or {})}
+    save(step="viz", cmap=cmap, ramp=opts, title=title, subtitle=subtitle, labels=labels)
     viz_tif = make_viz(dem, rem_tif, out_dir, cmap, table_path)
 
     save(step="preview")
@@ -790,7 +837,14 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
         source = manifest.get("centerline_source", "NHD")
         data = "USGS NHD HighRes" if source == "NHD" else "© OpenStreetMap contributors"
         slug = "".join(c if c.isalnum() else "-" for c in manifest["river"].lower()).strip("-")
-        style = f"{''.join(c if c.isalnum() else '-' for c in cmap)}-{opts['style']}"
+        style = (f"{''.join(c if c.isalnum() else '-' for c in cmap)}{'-inverted' if opts['invert'] else ''}"
+                 f"-{opts['style']}")
+        ink = label_ink(labels["color"], legend)
+        spec_labels = None
+        if ink:
+            spec_labels = {"color": ink, "layers": label_layers(out_dir, manifest, labels["scope"])}
+            log(f"River labels: {labels['color']} ({'white' if ink == LABEL_INKS['white'] else 'black'}), "
+                f"{'all named streams' if labels['scope'] == 'all' else manifest['river']}")
         spec = {
             "out_dir": os.path.abspath(out_dir),
             "viz_tif": os.path.abspath(viz_tif),
@@ -798,6 +852,7 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
             "title": title,
             "subtitle": subtitle,
             "legend": legend,
+            "labels": spec_labels,
             "credits": (f"Elevation: USGS 3DEP {manifest['res_m']:g} m  ·  River: {data}  ·  "
                         f"REM: RiverREM  ·  UTM {frame['epsg'] - 26900}N  ·  {datetime.now():%b %Y}"),
             # one set of print files per colour style, so restyles don't overwrite each other
@@ -825,7 +880,8 @@ def _job_saver(out_dir: str, manifest: dict):
 def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
         bbox: tuple | None = None, stretch: dict | None = None, corridor_m: float = 1500,
         page: str = "11x17", orientation: str = "auto", title: str | None = None,
-        subtitle: str | None = None, make_pdf: bool = True, ramp_opts: dict | None = None) -> dict:
+        subtitle: str | None = None, make_pdf: bool = True, ramp_opts: dict | None = None,
+        label_opts: dict | None = None) -> dict:
     """Generate a REM and print layout for `river`, framed on a drawn bbox or a stretch (GeoJSON, EPSG:4326).
 
     ramp_opts: style, log, steps, top, units, first (see ramp()); top=None uses RiverREM's automatic top.
@@ -882,7 +938,7 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
         if stretch:
             manifest["files"]["stretch"] = "stretch.geojson"
 
-        style_outputs(out_dir, manifest, save, cmap, ramp_opts or {}, title, subtitle, make_pdf)
+        style_outputs(out_dir, manifest, save, cmap, ramp_opts or {}, title, subtitle, make_pdf, label_opts)
         save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"))
         log(f"Done: {out_dir}")
     except Exception as exc:
@@ -893,7 +949,8 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
 
 
 def restyle(out_dir: str, cmap: str | None = None, ramp_opts: dict | None = None,
-            title: str | None = None, subtitle: str | None = None, make_pdf: bool = True) -> dict:
+            title: str | None = None, subtitle: str | None = None, make_pdf: bool = True,
+            label_opts: dict | None = None) -> dict:
     """Recolour a finished run and rebuild its preview and print, reusing its DEM and REM (no download).
 
     Options left as None keep the run's previous values.
@@ -920,7 +977,7 @@ def restyle(out_dir: str, cmap: str | None = None, ramp_opts: dict | None = None
          restyled=datetime.now().isoformat(timespec="seconds"))
     try:
         log(f"Recolouring {os.path.basename(out_dir)} (reusing its DEM and REM)")
-        style_outputs(out_dir, manifest, save, cmap, opts, title, subtitle, make_pdf)
+        style_outputs(out_dir, manifest, save, cmap, opts, title, subtitle, make_pdf, label_opts)
         save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"))
         log("Done")
     except Exception as exc:
@@ -942,6 +999,12 @@ def add_ramp_args(sp, keep: bool = False) -> None:
     sp.add_argument("--top", default=d("auto"), help="height where the ramp ends, or 'auto'")
     sp.add_argument("--first", default=d("auto"),
                     help="stepped ramps: height of the lowest band (e.g. 2 with --units m), or 'auto'")
+    sp.add_argument("--invert", default=d(False), action=argparse.BooleanOptionalAction,
+                    help="run the colormap backwards (--no-invert to undo on restyle)")
+    sp.add_argument("--labels", default=d("auto"), choices=("auto", "white", "black", "off"),
+                    help="river name labels on the print; auto picks white or black to contrast with the river")
+    sp.add_argument("--label-scope", default=d("river"), choices=("river", "all"),
+                    help="label just the mapped river, or all named streams in the frame")
 
 
 def ramp_from_args(args) -> dict:
@@ -959,6 +1022,18 @@ def ramp_from_args(args) -> dict:
         value = getattr(args, key)
         if value is not None:
             opts[key] = None if str(value).lower() == "auto" else float(value)
+    if args.invert is not None:
+        opts["invert"] = args.invert
+    return opts
+
+
+def labels_from_args(args) -> dict:
+    """Only the label options that were given."""
+    opts = {}
+    if args.labels is not None:
+        opts["color"] = args.labels
+    if args.label_scope is not None:
+        opts["scope"] = args.label_scope
     return opts
 
 
@@ -1006,7 +1081,8 @@ def main() -> int:
         print(f"{tr['river']} ({tr['source']}): {tr['length_km']} km, snapped {tr['snap_m'][0]} m / {tr['snap_m'][1]} m")
         return 0
     if args.cmd == "restyle":
-        restyle(args.run, args.cmap, ramp_from_args(args), args.title, args.subtitle, not args.no_print)
+        restyle(args.run, args.cmap, ramp_from_args(args), args.title, args.subtitle, not args.no_print,
+                labels_from_args(args))
         return 0
 
     stretch, river = None, args.river
@@ -1025,7 +1101,8 @@ def main() -> int:
         p.error("--river is required")
     run(river, args.res, args.cmap, args.out, bbox=tuple(args.bbox) if args.bbox else None,
         stretch=stretch, corridor_m=args.corridor, page=args.page, orientation=args.orientation,
-        title=args.title, subtitle=args.subtitle, make_pdf=not args.no_print, ramp_opts=ramp_from_args(args))
+        title=args.title, subtitle=args.subtitle, make_pdf=not args.no_print, ramp_opts=ramp_from_args(args),
+        label_opts=labels_from_args(args))
     return 0
 
 
