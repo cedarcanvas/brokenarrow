@@ -31,16 +31,24 @@ it, then hover other ZIPs to read exact days.
 - Since 1 Oct 2026, Ground Advantage to/from Alaska, Hawaii and the territories
   is 10+ days (surface transport).
 
-## Updating the data (every USPS quarter)
+## Updating the data (automatic)
 
-1. Download the service-standard files from PostalPro (see `raw/usps/README.md`)
-   and put them in `raw/usps/`. Zip files are fine. Optionally write the data
-   date, e.g. `FY2027 Q1`, into `raw/usps/vintage.txt`.
-2. Commit and push to `main`. The GitHub Action downloads the Census shapes,
-   runs the build, and publishes the site.
+The GitHub Action runs `build/fetch_usps.py` on every build and once a month.
+It opens the PostalPro service-standards page
+(https://postalpro.usps.com/operations/service-standards), finds the download
+links, keeps the newest quarter's 3-digit service-standard files, and saves
+them to `raw/usps/` with the quarter in `vintage.txt`. The build log lists
+every link it found and why each was kept or skipped.
 
-Until real USPS files are in `raw/usps/`, the Action builds with **made-up demo
-days** and the page shows a yellow "Demo data" banner.
+Files you commit to `raw/usps/` yourself always win over the automatic
+download. If the download finds nothing (USPS changed the page or blocked the
+request), the build falls back to **made-up demo days** and the page shows a
+yellow "Demo data" banner. To fix that, either:
+
+- commit the files by hand (see `raw/usps/README.md`), or
+- point the script at one link: `python build/fetch_usps.py --url <link>`.
+
+Run `python build/fetch_usps.py --dry-run` to see what it would download.
 
 ## Building on your own computer
 

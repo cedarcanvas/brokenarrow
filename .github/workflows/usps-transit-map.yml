@@ -12,6 +12,9 @@ on:
     paths:
       - "tools/usps_transit_map/**"
       - ".github/workflows/usps-transit-map.yml"
+  schedule:
+    # Monthly refresh so new quarterly USPS data is picked up (07:17 UTC on the 3rd).
+    - cron: "17 7 3 * *"
   workflow_dispatch:
     inputs:
       demo:
@@ -65,13 +68,27 @@ jobs:
           fi
           ls -la raw/census
 
+      - name: Fetch USPS service standards
+        # Only when no USPS files are committed in raw/usps/ - files added by hand always win.
+        run: |
+          if find raw/usps -type f ! -iname 'readme.md' ! -iname 'columns.json' ! -iname 'vintage.txt' ! -name '.*' | grep -q .; then
+            echo "Using the USPS files committed in raw/usps/"
+          else
+            python build/fetch_usps.py
+          fi
+          ls -la raw/usps
+
       - name: Build map data
         run: |
           if [ "${{ inputs.demo }}" = "true" ] || ! find raw/usps -type f ! -iname 'readme.md' ! -iname 'columns.json' ! -iname 'vintage.txt' ! -name '.*' | grep -q .; then
             echo "::warning::No USPS service-standard files in raw/usps - building with DEMO days."
             python build/build_data.py --demo-days
-          else
-            python build/build_data.py
+          elif ! python build/build_data.py; then
+            # On pull requests, fail loudly so the problem gets fixed. On main, keep the
+            # site up with demo days (and its banner) rather than publishing nothing.
+            if [ "${{ github.event_name }}" = "pull_request" ]; then exit 1; fi
+            echo "::warning::Could not read the USPS files - building with DEMO days. See the log above."
+            python build/build_data.py --demo-days
           fi
 
       - uses: actions/upload-pages-artifact@v3
