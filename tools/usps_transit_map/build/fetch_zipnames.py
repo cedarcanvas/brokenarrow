@@ -83,30 +83,21 @@ def zip_names():
 
 
 def probe_hubs():
-    """Print what USPS's labeling-list directory and hub page look like (for the hub layer)."""
+    """Print what USPS's facility file / hub location pages hold (for the hub layer)."""
     print("\nProbe: postal hub sources")
-    for page in ("https://fast.usps.com/fast/fastApp/resources/labelListFiles.action",
-                 "https://postalpro.usps.com/operations/service-hubs-and-facilities"):
+    for page in ("https://postalpro.usps.com/service-hubs-and-facilities/facilityfile",
+                 "https://postalpro.usps.com/node/619",
+                 "https://postalpro.usps.com/node/1168"):
         try:
-            body, ctype, final = get(page)
+            links = page_links(page)
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             print(f"  - {page}: {e}")
             continue
-        html = body.decode("utf-8", "replace")
-        links = page_links(page)
-        print(f"  + {page} -> {final} ({ctype}, {len(body):,} bytes, {len(links)} links)")
-        for u, t in links:
-            if re.search(r"L00\d|L0\d\d|label|hub|facilit|rpdc|p&dc|pdc|\.(zip|xlsx?|txt|csv|pdf)$", u + " " + t, re.I):
-                print(f"     {t[:70]!r} -> {u}")
-        try:
-            for i, t in enumerate(pd.read_html(io.StringIO(html))[:4]):
-                print(f"     table {i} {t.shape}:\n" + t.head(12).to_string(max_colwidth=50))
-        except ValueError:
-            pass
-        files = [u for u, _ in links if re.search(r"L005|L002", u, re.I)]
-        for u in files[:3]:
-            print(f"   sample {u}")
-            show_file(u)
+        files = [(u, t) for u, t in links if re.search(r"\.(zip|xlsx?|txt|csv|pdf)$", u, re.I)]
+        print(f"  + {page}: {len(links)} links; files: {files[:10]}")
+        for u, _ in files[:3]:
+            if not u.lower().endswith(".pdf"):
+                show_file(u)
 
 
 def show_file(url):
@@ -123,7 +114,9 @@ def show_file(url):
     else:
         blobs.append((url.rsplit("/", 1)[-1], data))
     for name, b in blobs:
-        if name.lower().endswith((".xlsx", ".xls")):
+        if name.lower().endswith(".pdf"):
+            print(f"     {name}: PDF, {len(b):,} bytes")
+        elif name.lower().endswith((".xlsx", ".xls")):
             for sh, df in pd.read_excel(io.BytesIO(b), sheet_name=None, dtype=str, header=None).items():
                 print(f"     {name} [{sh}] {df.shape}:\n" + df.head(8).to_string(max_colwidth=40))
         else:
