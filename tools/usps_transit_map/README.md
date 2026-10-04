@@ -33,7 +33,7 @@ it, then hover other ZIPs to read exact days.
 - **City labels:** major cities on the full map, regional cities as you zoom
   in. They come from `web/cities.json`, made by `build/make_cities.py` from
   Natural Earth (public domain).
-- **Colours:** ColorBrewer OrRd, 7 classes, light (fast) to dark red (slow),
+- **Colours:** ColorBrewer GnBu, 7 classes, light green (fast) to dark blue (slow),
   with grey for "no standard".
 - **Sharing:** the address keeps the view, e.g. `…/#pm/80302/fri/10001` opens
   Priority Mail from 80302 to 10001, mailed on a Friday.

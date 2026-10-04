@@ -199,6 +199,13 @@
     };
     S.meshState = meshPath({ t: states, o: states.objects.states },
       (a, b) => a !== b, (a) => stateP[a.properties.name] ?? 0);
+    // All land, drawn under the ZIP shapes: what shows through is land that no
+    // Census ZIP code area covers (forests, deserts, ranges, open water inside states).
+    S.landPath = new Path2D();
+    for (const f of topojson.feature(states, states.objects.states).features) {
+      if (f.geometry && d3.geoArea(f) > 2 * Math.PI) rewind(f.geometry);
+      d3.geoPath(projs[stateP[f.properties.name] ?? 0]).context(S.landPath)(f);
+    }
 
     // A coarse grid of ZIP bounding boxes, for quick hover lookups.
     const G = 64, gw = VW / G, gh = VH / G;
@@ -246,7 +253,7 @@
 
   // Tier 1 (major cities) on the national view; regional cities as you zoom in.
   function drawCities(placed = []) {
-    if (!S.cities || !S.cities.length) return;
+    if (!S.cities || !S.cities.length) return placed;
     const maxTier = S.t.k < 1.8 ? 1 : S.t.k < 5 ? 2 : 3;
     const named = [], C = S.colors;
     // Small screens: only the biggest metros on the national view.
@@ -282,6 +289,32 @@
       ctx.fillStyle = C.ink; ctx.fillText(c.name, box[0] + 2, sy);
     }
     ctx.textBaseline = "alphabetic";
+    return placed;
+  }
+
+  // ZIP prefix labels ("816xx") when zoomed in, placed at each prefix's center
+  // and skipped where they would cover a city or plant label.
+  function drawPrefixes(placed) {
+    if (S.t.k < 2.5) return;
+    const C = S.colors;
+    ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+    for (let i = 0; i < S.N; i++) {
+      const z = S.zip3[i];
+      if (!S.zip3Count[i] || !z.c) continue;
+      if (z.p && (PANELS[z.p].box[1][0] - PANELS[z.p].box[0][0]) * scale() < 150) continue;
+      const xy = S.projs[z.p] && S.projs[z.p](z.c);
+      if (!xy) continue;
+      const [sx, sy] = toScreen(xy[0], xy[1]);
+      if (sx < -20 || sy < -10 || sx > S.w + 20 || sy > S.h + 10) continue;
+      const text = `${z.z}xx`, w = ctx.measureText(text).width;
+      const b = [sx - w / 2 - 2, sy - 7, sx + w / 2 + 2, sy + 7];
+      if (placed.some(q => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1])) continue;
+      placed.push(b);
+      ctx.lineWidth = 3; ctx.strokeStyle = C.halo; ctx.strokeText(text, sx, sy);
+      ctx.fillStyle = C.ink2; ctx.fillText(text, sx, sy);
+    }
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
   }
 
   // ---------- postal hubs ----------
@@ -471,7 +504,22 @@
       bg: g("--map-bg"), land: g("--land"), ink: g("--ink"), ink2: g("--ink-2"), muted: g("--muted"),
       zip3: g("--line-zip3"), zcta: g("--line-zcta"), state: g("--line-state"), halo: g("--halo"),
       hair: g("--hair"), dest: g("--dest"), hub: g("--hub"),
+      empty: g("--empty"), emptyLine: g("--empty-line"), stateHalo: g("--line-state-halo"),
     };
+  }
+
+  // Diagonal hatching for land with no ZIP code (cached per theme).
+  function hatchPattern() {
+    if (!S.hatch || S.hatch.color !== S.colors.emptyLine) {
+      const c = document.createElement("canvas"), d = 6 * (window.devicePixelRatio || 1);
+      c.width = c.height = d;
+      const g = c.getContext("2d");
+      g.strokeStyle = S.colors.emptyLine; g.lineWidth = d / 6;
+      g.beginPath(); g.moveTo(0, d); g.lineTo(d, 0); g.moveTo(-d / 2, d / 2); g.lineTo(d / 2, -d / 2);
+      g.moveTo(d / 2, d * 1.5); g.lineTo(d * 1.5, d / 2); g.stroke();
+      S.hatch = { color: S.colors.emptyLine, pat: ctx.createPattern(c, "repeat"), d };
+    }
+    return S.hatch.pat;
   }
 
   function resize() {
@@ -513,12 +561,21 @@
       ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
     });
 
+    // Land with no ZIP code: light hatching, so it doesn't read as a delivery color.
+    ctx.fillStyle = C.empty; ctx.fill(S.landPath);
+    const hatch = hatchPattern();
+    hatch.setTransform(new DOMMatrix().scale(1 / (d * k)));
+    ctx.fillStyle = hatch; ctx.fill(S.landPath);
+
     // Fills: one per ZIP prefix
     const row = S.rowCache || (S.rowCache = currentRow());
     for (let i = 0; i < S.N; i++) {
       if (!S.zip3Count[i]) continue;
+      const dim = row && S.focus != null && bkt(row[i]) !== S.focus;
+      // Spotlight: fade other groups over a solid base, so the "no ZIP code"
+      // hatching underneath never shows through.
+      if (dim) { ctx.fillStyle = C.land; ctx.fill(S.zip3Paths[i], "evenodd"); ctx.globalAlpha = 0.15; }
       ctx.fillStyle = row ? C.bucket[bkt(row[i])] : C.land;
-      ctx.globalAlpha = row && S.focus != null && bkt(row[i]) !== S.focus ? 0.15 : 1;
       ctx.fill(S.zip3Paths[i], "evenodd");
       ctx.globalAlpha = 1;
     }
@@ -529,7 +586,8 @@
     }
     ctx.lineWidth = Math.min(1.2, 0.35 * Math.sqrt(S.t.k)) / k;
     ctx.strokeStyle = C.zip3; ctx.stroke(S.meshZip3);
-    ctx.lineWidth = 0.9 / k; ctx.strokeStyle = C.state; ctx.stroke(S.meshState);
+    ctx.lineWidth = 2.6 / k; ctx.strokeStyle = C.stateHalo; ctx.stroke(S.meshState);
+    ctx.lineWidth = 1.1 / k; ctx.strokeStyle = C.state; ctx.stroke(S.meshState);
 
     // Origin prefix outline (halo + ink), then the origin ZIP and hovered ZIP.
     if (S.origin != null) outline(prefixOutline(S.origin), 2.6, 1.3);
@@ -539,7 +597,7 @@
 
     // City labels and panel labels (screen-sized text)
     ctx.setTransform(d, 0, 0, d, 0, 0);
-    drawCities(drawHubs());
+    drawPrefixes(drawCities(drawHubs()));
     if (S.dest) {
       const [[x0, y0], [x1, y1]] = S.dest.bbox;
       const [mx, my] = toScreen((x0 + x1) / 2, (y0 + y1) / 2);
@@ -582,8 +640,8 @@
 
   function unitsText() {
     $("units").textContent = S.mailDay == null
-      ? "USPS delivery days"
-      : `arrives on… if mailed ${WEEKDAY_NAMES[S.mailDay]}`;
+      ? "chance it arrives in…"
+      : `chance it arrives on… if mailed ${WEEKDAY_NAMES[S.mailDay]}`;
   }
 
   // Legend labels. With a mailing day picked, buckets are arrival days:
@@ -682,13 +740,54 @@
   }
 
   // ---------- side panel ----------
+  // Chance that a piece from the origin arrives in each legend group, if mailed
+  // to a random ZIP code. Each destination contributes its USPS target, spread out
+  // by how USPS actually did in that destination's district: share on time, then
+  // +1, +2, +3 days late (anything later counted as 4 days late). Without on-time
+  // data (Priority Mail, Ground Advantage) it is just the share of ZIP codes.
+  function chances() {
+    const raw = S.days[S.cls].subarray(S.origin * S.N, (S.origin + 1) * S.N);
+    const p = new Float64Array(BUCKETS.length);
+    let total = 0, measured = 0, withStd = 0;
+    const cal = S.mailDay == null ? null : CAL[S.mailDay];
+    const add = (dd, w) => { p[bkt(cal ? cal[Math.min(dd, 255)] : dd)] += w; };
+    for (let j = 0; j < S.N; j++) {
+      const n = S.zip3Count[j], d = raw[j];
+      if (!n) continue;
+      total += n;
+      if (!d) { p[NONE] += n; continue; }
+      withStd += n;
+      const r = perfFor(S.zip3[j].z, d);
+      const on = r && r.on[r.k];
+      if (on == null) { add(d, n); continue; }
+      measured += n;
+      const w = r.w[r.k] || [];
+      let prev = 0;
+      [on, w[0], w[1], w[2], 100].forEach((c, late) => {
+        c = Math.max(prev, c ?? prev);
+        if (c > prev) add(d + late, n * (c - prev) / 100);
+        prev = c;
+      });
+    }
+    for (let j = 0; j < p.length; j++) p[j] = total ? p[j] / total : 0;
+    return { p, measured: withStd ? measured / withStd : 0 };
+  }
+  const chanceText = (v) => (v <= 0 ? "0%" : v < 0.005 ? "<1%" : `${Math.round(v * 100)}%`);
+
   function legend() {
     S.rowCache = null;
     const ul = $("legend");
     const counts = new Array(BUCKETS.length).fill(0);
     const row = S.rowCache || (S.rowCache = currentRow());
     if (row) for (let i = 0; i < S.N; i++) counts[bkt(row[i])] += S.zip3Count[i];
-    const max = Math.max(1, ...counts);
+    const ch = row ? chances() : null;
+    const max = ch ? Math.max(1e-9, ...ch.p) : 1;
+    let cum = 0;
+    $("legendNote").textContent = !row
+      ? "Pick a starting ZIP to see the chance your mail arrives in each number of days."
+      : ch.measured > 0.5
+        ? `Chance a piece mailed from ${S.originZip.z} to a random ZIP code arrives in that many days: USPS targets, adjusted by USPS's own on-time results for each destination district (${S.perf.quarter}). Hover a row for the number of ZIP codes and to spotlight them on the map.`
+        : `USPS publishes no on-time results for this mail class, so this is the share of ZIP codes at each USPS target. Hover a row for the number of ZIP codes and to spotlight them on the map.`;
     const t = target();
     const hoverB = row && (t || S.hover) ? bkt(row[(t || S.hover).i]) : -1;
     ul.innerHTML = "";
@@ -696,13 +795,19 @@
       // USPS doesn't count Sundays, so nothing is scheduled to arrive on one.
       if (S.mailDay != null && j < 6 && (S.mailDay + j + 1) % 7 === 6) return;
       const li = document.createElement("li");
-      if (row && !counts[j]) li.className = "zero";
+      if (row && !counts[j] && !(ch && ch.p[j] >= 0.005)) li.className = "zero";
       if (j === hoverB) li.classList.add("hit");
       if (j === S.focus) li.classList.add("focus");
+      const pj = ch ? ch.p[j] : 0;
+      if (j !== NONE) cum += pj;
       li.innerHTML = `<span class="sw" style="background:${S.colors.bucket[j]}"></span>
         <span class="lab">${bucketLabel(j)}</span>
-        <span class="bar">${row ? `<i style="width:${(100 * counts[j] / max).toFixed(1)}%"></i>` : ""}</span>
-        <span class="n">${row ? counts[j].toLocaleString() : ""}</span>`;
+        <span class="bar">${row ? `<i style="width:${(100 * pj / max).toFixed(1)}%"></i>` : ""}</span>
+        <span class="n">${row ? `<span class="pc">${chanceText(pj)}</span><span class="ct">${counts[j].toLocaleString()} ZIPs</span>` : ""}</span>`;
+      if (row) li.title = j === NONE
+        ? `${counts[j].toLocaleString()} ZIP codes have no USPS target from here`
+        : `${counts[j].toLocaleString()} ZIP codes have this USPS target` +
+          (j < 6 ? ` · ${chanceText(cum)} chance it arrives ${S.mailDay == null ? "within" : "by"} ${bucketLabel(j)}` : "");
       // Hover a legend row to spotlight those ZIPs on the map.
       li.onmouseenter = () => { S.focus = j; draw(); };
       li.onmouseleave = () => { S.focus = null; draw(); };

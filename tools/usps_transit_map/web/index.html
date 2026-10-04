@@ -67,9 +67,11 @@
       <div class="origin-hub" id="originHub" hidden></div>
       <button id="unpin" class="unpin" hidden>Unpin</button>
     </div>
-    <h2 class="legend-title"><span id="className">First-Class Mail</span> · <span id="units">USPS delivery days</span></h2>
+    <h2 class="legend-title"><span id="className">First-Class Mail</span> · <span id="units">chance it arrives in…</span></h2>
     <ul class="legend" id="legend"></ul>
-    <p class="legend-note">Bars: ZIP codes reached in each class. Hover a row to spotlight it on the map.</p>
+    <p class="legend-note" id="legendNote"></p>
+    <p class="nozip"><span class="sw-empty"></span>No ZIP code here: mostly unpopulated land (national forests,
+      deserts, ranges, the North Maine Woods). Census ZIP code areas only cover places where people live or get mail.</p>
     <div class="hubkey" id="hubkey" hidden>
       <label><input type="checkbox" id="showHubs" checked> Show USPS mail plants</label>
       <div class="hubkinds">
@@ -116,7 +118,14 @@
       <li><strong>City labels:</strong> <a href="https://www.naturalearthdata.com/">Natural Earth</a> populated places
         (public domain). Major cities show on the full map; more appear as you zoom in.</li>
       <li><strong>ZIP shapes:</strong> U.S. Census Bureau 2020 ZIP Code Tabulation Areas. They approximate ZIP codes;
-        PO-box-only ZIPs have no shape.</li>
+        PO-box-only ZIPs have no shape. They only cover populated places, so land with nobody living on it
+        (much of the North Maine Woods, national forests, deserts and military ranges) has no ZIP area and is
+        shown hatched. Zoom in to see each three-digit ZIP prefix labelled on the map (e.g. 816xx).</li>
+      <li><strong>Chance it arrives:</strong> for each destination ZIP, the USPS target is spread out using USPS's
+        on-time results for that destination's district: the share delivered on time, then 1, 2 and 3 days late
+        (anything later is counted as 4 days late). The legend averages this over every ZIP code, as if you mailed one
+        piece to a random ZIP. It is an estimate from district averages, not a guarantee for your piece. Priority Mail
+        and Ground Advantage have no published on-time results, so for them the legend shows the share of ZIP codes.</li>
       <li><strong>Map:</strong> Equal Earth projection, which keeps areas true. Alaska, Hawaii and the territories
         are shown in separate boxes, each at its own scale.</li>
     </ul>
