@@ -83,29 +83,30 @@ def zip_names():
 
 
 def probe_hubs():
-    """Print what USPS's labeling lists look like (for the postal-hub layer)."""
+    """Print what USPS's labeling-list directory and hub page look like (for the hub layer)."""
     print("\nProbe: postal hub sources")
-    page = "https://postalpro.usps.com/operations/labeling-lists"
-    try:
-        links = page_links(page)
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        print(f"  - {page}: {e}")
-        return
-    print(f"  + {page}: {len(links)} links (all shown)")
-    for u, t in links:
-        print(f"     {t[:70]!r} -> {u}")
-    # Likely direct pages for the 3-digit lists.
-    for name in ("L002", "L005", "L009", "L801", "L005_SCF", "L002_3digit"):
-        u = f"https://postalpro.usps.com/{name}"
+    for page in ("https://fast.usps.com/fast/fastApp/resources/labelListFiles.action",
+                 "https://postalpro.usps.com/operations/service-hubs-and-facilities"):
         try:
-            more = page_links(u)
+            body, ctype, final = get(page)
         except (urllib.error.URLError, TimeoutError, OSError) as e:
-            print(f"   - {u}: {e}")
+            print(f"  - {page}: {e}")
             continue
-        files = [(u2, t2) for u2, t2 in more if re.search(r"\.(zip|xlsx?|txt|csv)$", u2, re.I)]
-        print(f"   + {u}: {len(more)} links, files: {files[:6]}")
-        for u2, _ in files[:2]:
-            show_file(u2)
+        html = body.decode("utf-8", "replace")
+        links = page_links(page)
+        print(f"  + {page} -> {final} ({ctype}, {len(body):,} bytes, {len(links)} links)")
+        for u, t in links:
+            if re.search(r"L00\d|L0\d\d|label|hub|facilit|rpdc|p&dc|pdc|\.(zip|xlsx?|txt|csv|pdf)$", u + " " + t, re.I):
+                print(f"     {t[:70]!r} -> {u}")
+        try:
+            for i, t in enumerate(pd.read_html(io.StringIO(html))[:4]):
+                print(f"     table {i} {t.shape}:\n" + t.head(12).to_string(max_colwidth=50))
+        except ValueError:
+            pass
+        files = [u for u, _ in links if re.search(r"L005|L002", u, re.I)]
+        for u in files[:3]:
+            print(f"   sample {u}")
+            show_file(u)
 
 
 def show_file(url):
