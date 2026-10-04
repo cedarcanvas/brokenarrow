@@ -53,6 +53,23 @@ yellow "Demo data" banner. To fix that, either:
 
 Run `python build/fetch_usps.py --dry-run` to see what it would download.
 
+## On-time performance (how long mail really takes)
+
+`build/fetch_performance.py` runs after the main build. It downloads USPS's
+newest quarterly service performance reports from
+https://about.usps.com/what/performance/service-performance/ and writes
+`web/data/perf.json`. It also reads USPS's list of which 3-digit ZIP prefixes
+belong to each district. The page then shows, for the sending and receiving
+district, the share of mail delivered on time and within 1 and 3 extra days.
+
+- **Letters:** Single-Piece First-Class Mail, by district and target (2-day or 3–5-day).
+- **Marketing Mail:** end-to-end, by district.
+- **Periodicals:** by area. USPS reports only 4 areas for Periodicals.
+- **Priority Mail and Ground Advantage:** USPS publishes no regional results,
+  so the page says so.
+
+If the reports can't be read, the step only warns and the map works without them.
+
 ## Building on your own computer
 
 You need Python 3.10+ and Node 18+.

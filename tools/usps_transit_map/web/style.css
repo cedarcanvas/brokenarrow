@@ -150,6 +150,17 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .legend li.hit { background: var(--hair); }
 .legend-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
 
+.perf { border-top: 1px solid var(--hair); margin-top: 12px; padding-top: 12px; font-size: 13px; }
+.perf h3 { font-size: 13px; margin: 0 0 4px; color: var(--ink-2); }
+.perf p { margin: 0 0 6px; }
+.perf .small { font-size: 12px; margin-top: 6px; }
+.perf-t { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.perf-t th, .perf-t td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--hair); }
+.perf-t th:first-child { text-align: left; font-weight: 500; color: var(--ink-2); }
+.perf-t thead th { font-weight: 500; color: var(--muted); font-size: 12px; }
+.perf-t td { font-weight: 600; }
+.nw { white-space: nowrap; }
+.perf-tip { margin-top: 3px; font-size: 12.5px; }
 .foot { padding: 10px 20px 18px; color: var(--ink-2); font-size: 13px; }
 .foot .status { margin: 0 0 6px; min-height: 1.4em; }
 .foot details { max-width: 860px; }

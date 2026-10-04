@@ -17,6 +17,9 @@
   ];
   const NONE = 7;
   const bucketOf = (d) => (d === 0 ? NONE : d <= 5 ? d - 1 : d <= 9 ? 5 : 6);
+  // With a mailing day picked, colors mean arrival days: days 1-6 after mailing
+  // each get their own color (one weekday each), then "a week or more".
+  const bkt = (v) => (S.mailDay == null ? bucketOf(v) : v === 0 ? NONE : v <= 6 ? v - 1 : 6);
   const daysText = (d) => (d === 0 ? "No USPS standard" : d === 1 ? "1 day" : `${d} days`);
   // Mailing day. USPS counts delivery days after the day mail is accepted and
   // skips Sundays and federal holidays, so the weekday you mail on changes how
@@ -81,6 +84,8 @@
       fetch("data/states.topo.json").then(r => r.json()),
     ]);
     S.meta = meta; S.zip3 = zip3; S.N = zip3.length;
+    // Optional: USPS on-time results (made by build/fetch_performance.py).
+    S.perf = await fetch("data/perf.json").then(r => (r.ok ? r.json() : null)).catch(() => null);
     $("demo").hidden = !meta.demo;
     $("vintage").textContent = `Data: ${meta.vintage} · built ${meta.built}`;
 
@@ -278,7 +283,7 @@
     const row = S.rowCache || (S.rowCache = currentRow());
     for (let i = 0; i < S.N; i++) {
       if (!S.zip3Count[i]) continue;
-      ctx.fillStyle = row ? C.bucket[bucketOf(row[i])] : C.land;
+      ctx.fillStyle = row ? C.bucket[bkt(row[i])] : C.land;
       ctx.fill(S.zip3Paths[i], "evenodd");
     }
 
@@ -333,7 +338,16 @@
   function unitsText() {
     $("units").textContent = S.mailDay == null
       ? "USPS delivery days"
-      : `calendar days if mailed ${WEEKDAY_NAMES[S.mailDay]}`;
+      : `arrives on… if mailed ${WEEKDAY_NAMES[S.mailDay]}`;
+  }
+
+  // Legend labels. With a mailing day picked, buckets are arrival days:
+  // calendar day n after mailing on weekday m lands on weekday (m + n) % 7.
+  function bucketLabel(j) {
+    const m = S.mailDay;
+    if (m == null || j === NONE) return BUCKETS[j].label;
+    if (j < 6) return WEEKDAY_NAMES[(m + j + 1) % 7];
+    return `Next ${WEEKDAY_NAMES[m]} or later`;
   }
 
   function setMailDay(v) {
@@ -343,21 +357,87 @@
   }
   $("mailday").addEventListener("change", (e) => setMailDay(e.target.value));
 
+  // ---------- on-time performance ----------
+  // USPS reports how much mail actually arrived on time, per district (or area),
+  // per quarter. d = USPS target days for the pair, used to pick the 2-day or
+  // 3-to-5-day column for First-Class Mail.
+  function perfFor(zip3code, d) {
+    const P = S.perf, c = P && P.classes[S.cls];
+    if (!c) return null;
+    const dist = P.zip3[zip3code];
+    if (!dist) return null;
+    const regionKey = c.level === "area" ? P.districts[dist]?.area : dist;
+    const rec = regionKey && c.regions[regionKey];
+    if (!rec) return null;
+    let k = "all";
+    if (c.by_std) {
+      k = d <= 1 ? "1" : d === 2 ? "2" : "3";
+      if (rec.on[k] == null && d != null) return null;
+    }
+    const name = c.level === "area" ? `${P.areas[regionKey] || regionKey} area` : `${P.districts[dist].name} district`;
+    return { name, on: rec.on, w: rec.w, k, nation: c.nation };
+  }
+  const pct = (v) => (v == null ? "—" : `${Math.round(v)}%`);
+  const STD_NAME = { 1: "overnight", 2: "2-day", 3: "3–5-day", all: "" };
+
+  function perfLine(p) {
+    const w1 = p.w[p.k] && p.w[p.k][0];
+    return `<b>${pct(p.on[p.k])}</b> on time${w1 != null ? ` · ${pct(w1)} within 1 extra day` : ""}`;
+  }
+
+  function perfPanel() {
+    const box = $("perf");
+    const P = S.perf;
+    if (!P) { box.hidden = true; return; }
+    box.hidden = false;
+    const c = P.classes[S.cls];
+    const cls = S.meta.classes.find(x => x.key === S.cls).label;
+    if (!c) {
+      box.innerHTML = `<h3>How often it's on time</h3>
+        <p class="muted">USPS doesn't publish on-time results by region for ${cls}.</p>`;
+      return;
+    }
+    if (S.origin == null) {
+      box.innerHTML = `<h3>How often it's on time</h3>
+        <p class="muted">Hover a ZIP to see USPS's on-time record for its ${c.level}.</p>`;
+      return;
+    }
+    const z3 = S.zip3[S.origin].z;
+    const keys = c.by_std ? ["2", "3"] : ["all"];
+    const rows = keys.map((k) => {
+      const p = perfFor(z3, k === "2" ? 2 : 3);
+      if (!p) return "";
+      const w = p.w[p.k] || [];
+      return `<tr><th>${c.by_std ? STD_NAME[k] + " mail" : "All"}</th><td>${pct(p.on[p.k])}</td>
+        <td>${pct(w[0])}</td><td>${pct(w[2])}</td></tr>`;
+    }).join("");
+    const p0 = perfFor(z3, 3);
+    box.innerHTML = p0 ? `<h3>How often it's on time</h3>
+      <p class="muted">${c.label}, <span class="nw">${p0.name}</span>, ${P.quarter}</p>
+      <table class="perf-t"><thead><tr><th></th><th>On time</th><th>+1 day</th><th>+3 days</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <p class="muted small">Nationally: ${keys.map(k => `${c.by_std ? STD_NAME[k] + " " : ""}${pct(c.nation[k])}`).join(", ")} on time.
+      <a href="${c.source}">USPS report</a></p>`
+      : `<h3>How often it's on time</h3><p class="muted">No USPS results for this ${c.level}.</p>`;
+  }
+
   // ---------- side panel ----------
   function legend() {
     S.rowCache = null;
     const ul = $("legend");
     const counts = new Array(BUCKETS.length).fill(0);
     const row = S.rowCache || (S.rowCache = currentRow());
-    if (row) for (let i = 0; i < S.N; i++) counts[bucketOf(row[i])] += S.zip3Count[i];
-    const hoverB = row && S.hover ? bucketOf(row[S.hover.i]) : -1;
+    if (row) for (let i = 0; i < S.N; i++) counts[bkt(row[i])] += S.zip3Count[i];
+    const hoverB = row && S.hover ? bkt(row[S.hover.i]) : -1;
     ul.innerHTML = "";
     BUCKETS.forEach((b, j) => {
+      // USPS doesn't count Sundays, so nothing is scheduled to arrive on one.
+      if (S.mailDay != null && j < 6 && (S.mailDay + j + 1) % 7 === 6) return;
       const li = document.createElement("li");
       if (row && !counts[j]) li.className = "zero";
       if (j === hoverB) li.classList.add("hit");
       li.innerHTML = `<span class="sw" style="background:${S.colors.bucket[j]}"></span>
-        <span>${b.label}</span><span class="n">${row ? counts[j].toLocaleString() : ""}</span>`;
+        <span>${bucketLabel(j)}</span><span class="n">${row ? counts[j].toLocaleString() : ""}</span>`;
       ul.appendChild(li);
     });
 
@@ -368,6 +448,7 @@
       ? `${o.s || "—"} · prefix ${o.z}xx${S.pinned ? " · pinned" : ""}`
       : "Hover over the map, or click a ZIP to pin it.";
     $("unpin").hidden = !S.pinned;
+    perfPanel();
   }
 
   function showTip(sx, sy) {
@@ -382,14 +463,24 @@
       let line, note = label;
       if (S.mailDay != null && d) {
         const a = arrival(S.mailDay, d);
-        line = `<span class="sw" style="background:${S.colors.bucket[bucketOf(a.cal)]}"></span>
-          Mailed ${WEEKDAYS[S.mailDay]} → arrives ${WEEKDAYS[a.wd]} · ${a.cal} calendar day${a.cal === 1 ? "" : "s"}`;
-        note = `${label} · ${daysText(d)} by USPS count`;
+        const later = a.cal >= 7 ? ` (${a.cal >= 14 ? "in " + Math.floor(a.cal / 7) + " weeks" : "next week"})` : "";
+        line = `<span class="sw" style="background:${S.colors.bucket[bkt(a.cal)]}"></span>
+          Mailed ${WEEKDAY_NAMES[S.mailDay]} → arrives ${WEEKDAY_NAMES[a.wd]}${later}`;
+        note = `${label} · ${daysText(d)} by USPS count, ${a.cal} days after mailing`;
       } else {
         line = `<span class="sw" style="background:${S.colors.bucket[bucketOf(d)]}"></span>${daysText(d)}`;
       }
+      // On-time record of the sending and receiving districts, if USPS publishes one.
+      let perfHtml = "";
+      if (S.perf && d) {
+        const from = perfFor(S.zip3[S.origin].z, d), to = perfFor(z3.z, d);
+        if (from) perfHtml += `<div class="perf-tip">From ${from.name}: ${perfLine(from)}</div>`;
+        if (to && (!from || to.name !== from.name)) perfHtml += `<div class="perf-tip">To ${to.name}: ${perfLine(to)}</div>`;
+        if (!S.perf.classes[S.cls]) perfHtml = `<div class="perf-tip muted">No public on-time data for this service</div>`;
+      }
       html = `<b>${S.originZip.z}</b> → <b>${f.z}</b> <span class="muted">${z3.s}</span>
         <div class="days">${line}</div>
+        ${perfHtml}
         <span class="muted">${note}</span>`;
     } else {
       html = `From <b>${f.z}</b> <span class="muted">${z3.s} · prefix ${z3.z}xx</span>

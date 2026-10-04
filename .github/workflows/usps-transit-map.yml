@@ -78,10 +78,6 @@ jobs:
           fi
           ls -la raw/usps
 
-      - name: Probe USPS on-time performance sources (temporary)
-        continue-on-error: true
-        run: python build/probe_performance.py
-
       - name: Build map data
         run: |
           if [ "${{ inputs.demo }}" = "true" ] || ! find raw/usps -type f ! -iname 'readme.md' ! -iname 'columns.json' ! -iname 'vintage.txt' ! -name '.*' | grep -q .; then
@@ -94,6 +90,11 @@ jobs:
             echo "::warning::Could not read the USPS files - building with DEMO days. See the log above."
             python build/build_data.py --demo-days
           fi
+
+      - name: Add USPS on-time performance (optional)
+        # Quarterly district results from about.usps.com; never fails the build.
+        continue-on-error: true
+        run: python build/fetch_performance.py
 
       - uses: actions/upload-pages-artifact@v3
         with:
