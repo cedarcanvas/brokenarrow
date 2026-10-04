@@ -21,6 +21,7 @@
   --d1: #fef0d9; --d2: #fdd49e; --d3: #fdbb84; --d4: #fc8d59;
   --d5: #ef6548; --d6: #d7301f; --d7: #990000;
   --dest: #2a78d6;
+  --hub: #3a2d8f;   /* plant markers sit on the orange map in both themes */
   /* On-time meters: one blue ramp (validated --ordinal), kept apart from the map's OrRd */
   --m0: #184f95; --m1: #3987e5; --m3: #86b6ef; --mtrack: #e6e5df; --mnat: #0b0b0b;
 }
@@ -243,3 +244,11 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .legend li .bar i { display: block; height: 100%; min-width: 0; background: var(--ink-2); opacity: .35; border-radius: 0 4px 4px 0; }
 .legend li.hit .bar i, .legend li.focus .bar i { opacity: .7; }
 .legend li.focus { background: var(--hair); }
+
+/* USPS mail plants */
+.hubmark { display: inline-block; width: 8px; height: 8px; background: var(--hub); box-shadow: 0 0 0 1.5px #fff; margin-right: 7px; vertical-align: 0; }
+.hubmark.dia { width: 8px; height: 8px; transform: rotate(45deg) scale(1.05); }
+.origin-hub, .readout .plants { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+.hubkey { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--hair); font-size: 13px; color: var(--ink-2); }
+.hubkey label { display: flex; align-items: center; gap: 6px; color: var(--ink); cursor: pointer; }
+.hubkinds { display: flex; gap: 14px; margin: 6px 0 0; }

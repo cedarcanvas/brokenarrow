@@ -8,15 +8,12 @@ ZIP code with its post office's city and state.
 Output: {"c": [["Palos Verdes Peninsula", "CA"], ...], "z": {"90274": 0, ...}}
 (city list + ZIP -> index, to keep the file small).
 
-Also prints a short look at two USPS facility lists (3-digit "SCF" hubs) so
-a later version of the map can mark postal hubs. Never fails the build.
+Never fails the build.
 """
 
 import io
 import re
 import sys
-import urllib.error
-import zipfile
 from collections import Counter
 from pathlib import Path
 
@@ -82,33 +79,9 @@ def zip_names():
           f"({dest.stat().st_size / 1e3:.0f} KB); e.g. {[(z, cities[i]) for z, i in list(out.items())[:3]]}")
 
 
-def probe_hubs():
-    """Print what USPS's 3-digit facility lists look like (for a future hub layer)."""
-    print("\nProbe: postal hub sources")
-    for page in ("https://postalpro.usps.com/mailing/labeling-lists",
-                 "https://postalpro.usps.com/labeling-lists",
-                 "https://postalpro.usps.com/service-standards/3d-base"):
-        try:
-            links = page_links(page)
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            print(f"  - {page}: {e}")
-            continue
-        print(f"  + {page}: {len(links)} links")
-        for u, t in links:
-            if re.search(r"L005|L002|labeling|SCF|3D_Base|\.zip$|\.xlsx?$|\.txt$", u + " " + t, re.I):
-                print(f"     {t[:70]!r} -> {u}")
-                if re.search(r"3D_Base.*\.zip$", u):
-                    data, _, _ = get(u, timeout=300)
-                    with zipfile.ZipFile(io.BytesIO(data)) as zf:
-                        name = zf.namelist()[0]
-                        head = zf.read(name)[:600].decode("utf-8", "replace")
-                        print(f"     {name} first lines:\n       " + "\n       ".join(head.splitlines()[:5]))
-
-
 if __name__ == "__main__":
-    for step in (zip_names, probe_hubs):
-        try:
-            step()
-        except Exception as e:  # never break the map build over extras
-            print(f"::warning::{step.__name__} failed: {e}")
+    try:
+        zip_names()
+    except Exception as e:  # never break the map build over extras
+        print(f"::warning::fetch_zipnames.py failed: {e}")
     sys.exit(0)

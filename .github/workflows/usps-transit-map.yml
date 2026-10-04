@@ -100,6 +100,10 @@ jobs:
         continue-on-error: true
         run: python build/fetch_zipnames.py
 
+      - name: Add USPS mail plants (optional)
+        continue-on-error: true
+        run: python build/fetch_hubs.py
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: tools/usps_transit_map/web
