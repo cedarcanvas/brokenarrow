@@ -36,8 +36,11 @@ it, then hover other ZIPs to read exact days.
 The GitHub Action runs `build/fetch_usps.py` on every build and once a month.
 It opens the PostalPro service-standards page
 (https://postalpro.usps.com/operations/service-standards), finds the download
-links, keeps the newest quarter's 3-digit service-standard files, and saves
-them to `raw/usps/` with the quarter in `vintage.txt`. The build log lists
+links, and keeps the newest **Combined Service Standard Directory** file for
+each mail class on the map (`_FCM`, `_GAH`/`_GAL` Ground Advantage, `_PRI`,
+`_MKT`, `_PER`). Those list days for every 5-digit origin and destination ZIP;
+the build folds them to 3-digit prefixes using the most common value. Files
+go in `raw/usps/` with the effective date in `vintage.txt`. The build log lists
 every link it found and why each was kept or skipped.
 
 Files you commit to `raw/usps/` yourself always win over the automatic

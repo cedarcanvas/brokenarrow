@@ -52,6 +52,10 @@ SKIP_WORDS = {
     "intl": "international mail",
     "international": "international mail",
     "change": "a list of changes, not the full table",
+    "destination entry": "destination-entry (drop-ship) standards, not origin-destination",
+    "3d base": "3-digit base file - the Combined files already include it",
+    "pfc": "product not shown on the map (PFC)",
+    "pkg": "Package Services - not shown on the map",
 }
 FIVE_DIGIT = ("5-digit", "5 digit", "5digit", "five-digit", "suppl", "supplement", "zip5", "5dig")
 WANT_WORDS = ("service standard", "svc std", "ssd", "standard", "orig", "dest",
@@ -108,6 +112,16 @@ def quarter(text):
     yr, q = (a, b) if m.re.pattern.startswith("FY") else (b, a)
     yr = int(yr) + (2000 if len(yr) == 2 else 0)
     return (yr, int(q)), f"FY{yr} Q{q}"
+
+
+def effective_date(text):
+    """'..._10012026_...' (MMDDYYYY) -> sortable tuple and 'Effective Oct 1, 2026'."""
+    m = re.search(r"(?<!\d)(0[1-9]|1[0-2])([0-2]\d|3[01])(20\d\d)(?!\d)", text)
+    if not m:
+        return None
+    mm, dd, yy = (int(x) for x in m.groups())
+    months = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+    return (yy, mm, dd), f"Effective {months[mm - 1]} {dd}, {yy}"
 
 
 def judge(url, text, include5):
@@ -172,7 +186,7 @@ def main():
                 host = urllib.parse.urlparse(u).netloc
                 if is_file(u):
                     files.setdefault(u, t)
-                elif host.endswith("usps.com") and u not in seen_pages and re.search(
+                elif (host.endswith("usps.com") or host == urllib.parse.urlparse(start).netloc) and u not in seen_pages and re.search(
                         r"service.?standard|ssd|svc.?std|orig.?svc", f"{u} {t}", re.I):
                     sub.append(u)
             for u in dict.fromkeys(sub):
@@ -206,13 +220,15 @@ def main():
 
         # Several quarters listed? Keep only the newest one.
         qs = {u: quarter(f"{t} {urllib.parse.unquote(u)}") for u, t in candidates}
+        if not any(qs.values()):  # PostalPro names files by effective date instead
+            qs = {u: effective_date(f"{t} {urllib.parse.unquote(u)}") for u, t in candidates}
         dated = [q for q in qs.values() if q]
         if dated:
             newest = max(dated)[0]
             label = max(dated)[1]
             dropped = [u for u, q in qs.items() if q and q[0] != newest]
             candidates = [(u, t) for u, t in candidates if not qs[u] or qs[u][0] == newest]
-            print(f"\nNewest quarter listed: {label}" + (f" (skipping {len(dropped)} older files)" if dropped else ""))
+            print(f"\nNewest data listed: {label}" + (f" (skipping {len(dropped)} older files)" if dropped else ""))
             if not args.dry_run:
                 (args.out / "vintage.txt").write_text(label + "\n")
 

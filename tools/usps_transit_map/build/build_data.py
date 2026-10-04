@@ -58,10 +58,12 @@ CLASSES = {
 }
 
 # Words that identify a mail class in a USPS column value or file name.
-# Checked in this order, so the more specific words come first.
+# Checked in this order, so the more specific words come first. PostalPro's
+# Combined Service Standard Directory files end in product codes: _FCM, _GAH,
+# _GAL (Ground Advantage), _PRI (Priority), _MKT, _PER; _PFC and _PKG are not mapped.
 CLASS_WORDS = [
-    ("ga", ["ground advantage", "groundadvantage", "usps ground", "gnd", "ga", "uga"]),
-    ("pm", ["priority mail", "priority", "pm"]),
+    ("ga", ["ground advantage", "groundadvantage", "usps ground", "gnd", "ga", "uga", "gah", "gal"]),
+    ("pm", ["priority mail", "priority", "pm", "pri"]),
     ("fcm", ["first-class", "first class", "firstclass", "fcm", "fc", "fcmail"]),
     ("mkt", ["marketing", "standard mail", "mkt", "std", "usps marketing"]),
     ("per", ["periodical", "per", "pd"]),
@@ -307,8 +309,12 @@ def read_usps(folder, keep_zip3):
             for (cl, oo, dd, dy), n in grp.items():
                 t = tallies.setdefault((cl, oo, dd), {})
                 t[dy] = t.get(dy, 0) + int(n)
+            hist = sub.groupby(["cls", "days"]).size()
+            hist = {cl: {int(dy): int(n) for (c2, dy), n in hist.items() if c2 == cl}
+                    for cl in sub["cls"].unique()}
             log(f"  {name}: {len(sub):,} usable rows "
-                f"(origin={o!r}, dest={d!r}, days={k!r}, class={c or file_class!r})")
+                f"(origin={o!r}, dest={d!r}, days={k!r}, class={c or file_class!r})\n"
+                f"    days per row: {hist}")
 
     out = {}
     for (cl, oo, dd), t in tallies.items():
