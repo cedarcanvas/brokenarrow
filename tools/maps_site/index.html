@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ridgeline Maps · Interactive maps</title>
+<meta name="description" content="Interactive web maps by Ridgeline Maps.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<script>
+  // Old links to the delivery-days map (when it lived at the site root) carried
+  // the view in the address, e.g. "#pm/80302/fri/10001". Send them to /usps/.
+  if (/^#(fcm|ga|pm|mkt|per)(\/|$)/.test(location.hash)) location.replace("usps/" + location.hash);
+</script>
+<style>
+  :root {
+    --page: #f7f6f2; --surface: #ffffff; --ink: #0b0b0b; --ink-2: #5b6b7e;
+    --border: rgba(0, 0, 0, 0.10); --accent: #002868;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0f1215; --surface: #171b20; --ink: #ffffff; --ink-2: #b9c2cc;
+      --border: rgba(255, 255, 255, 0.10); --accent: #6da7ec;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0f1215; --surface: #171b20; --ink: #ffffff; --ink-2: #b9c2cc;
+    --border: rgba(255, 255, 255, 0.10); --accent: #6da7ec;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 48px 16px 64px; }
+  h1 { font-size: 30px; margin: 0; color: var(--accent); }
+  .sub { margin: 4px 0 32px; color: var(--ink-2); }
+  .maps { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px;
+          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .maps a {
+    display: block; height: 100%; padding: 18px 20px; border-radius: 12px; text-decoration: none;
+    background: var(--surface); border: 1px solid var(--border); color: var(--ink);
+  }
+  .maps a:hover, .maps a:focus-visible { border-color: var(--accent); }
+  .maps h2 { font-size: 18px; margin: 0 0 6px; color: var(--accent); }
+  .maps p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  footer { margin-top: 40px; font-size: 13px; color: var(--ink-2); }
+  footer a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ridgeline Maps</h1>
+  <p class="sub">Interactive maps</p>
+  <ul class="maps">
+    <li>
+      <a href="usps/">
+        <h2>USPS Delivery Days</h2>
+        <p>Hover over any ZIP code to see how many days USPS takes to deliver letters and packages to
+          the rest of the country, how often it's on time, and where the mail plants are.</p>
+      </a>
+    </li>
+  </ul>
+  <footer><a href="https://ridgelinemaps.com">ridgelinemaps.com</a></footer>
+</main>
+</body>
+</html>

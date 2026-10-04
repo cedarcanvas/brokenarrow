@@ -10,7 +10,11 @@ it, then hover other ZIPs to read exact days.
   USVI, Guam & N. Mariana Is. and American Samoa sit in boxes below the
   lower 48, each at its own scale.
 - **Hosting:** plain static files in `web/`, published by GitHub Pages through
-  `.github/workflows/usps-transit-map.yml`. No server needed.
+  `.github/workflows/usps-transit-map.yml`. No server needed. The map lives
+  at `/usps/`; the site root is a short list of maps from `tools/maps_site/`.
+  For a custom domain (e.g. `maps.ridgelinemaps.com`): add a DNS CNAME record
+  `maps` → `cedarcanvas.github.io`, then enter the domain under repo
+  Settings → Pages → Custom domain and turn on Enforce HTTPS.
 - **From / To boxes:** type two ZIP codes to get a trip card with the delivery
   days, the arrival weekday (when "Mailed on" is set) and the on-time record.
 - **ZIP city names:** `build/fetch_zipnames.py` reads USPS's ZIP Code Locale
