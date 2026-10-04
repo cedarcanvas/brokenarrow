@@ -1,5 +1,6 @@
 # Builds the USPS Delivery Days map and publishes it with GitHub Pages.
 # One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+# The site root is tools/maps_site (a list of maps); this map is at /usps/.
 name: USPS delivery-days map
 
 on:
@@ -7,10 +8,12 @@ on:
     branches: [main]
     paths:
       - "tools/usps_transit_map/**"
+      - "tools/maps_site/**"
       - ".github/workflows/usps-transit-map.yml"
   pull_request:
     paths:
       - "tools/usps_transit_map/**"
+      - "tools/maps_site/**"
       - ".github/workflows/usps-transit-map.yml"
   schedule:
     # Monthly refresh so new quarterly USPS data is picked up (07:17 UTC on the 3rd).
@@ -104,9 +107,19 @@ jobs:
         continue-on-error: true
         run: python build/fetch_hubs.py
 
+      # Site layout: the landing page (tools/maps_site) at the root and this
+      # map under /usps/, so more maps can sit next to it later.
+      - name: Assemble the site
+        working-directory: .
+        run: |
+          mkdir -p _site
+          cp -r tools/maps_site/. _site/
+          cp -r tools/usps_transit_map/web _site/usps
+          find _site -maxdepth 2 | sort
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: tools/usps_transit_map/web
+          path: _site
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
