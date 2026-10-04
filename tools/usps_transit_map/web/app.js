@@ -83,6 +83,7 @@
       fetch("data/zcta.topo.json").then(r => r.json()),
       fetch("data/states.topo.json").then(r => r.json()),
     ]);
+    const cities = await fetch("cities.json").then(r => (r.ok ? r.json() : [])).catch(() => []);
     S.meta = meta; S.zip3 = zip3; S.N = zip3.length;
     // Optional: USPS on-time results (made by build/fetch_performance.py).
     S.perf = await fetch("data/perf.json").then(r => (r.ok ? r.json() : null)).catch(() => null);
@@ -95,11 +96,13 @@
     buildClassButtons();
     if (hash.day != null) { S.mailDay = hash.day; $("mailday").value = String(hash.day); }
     buildGeometry(topo, states);
+    buildCities(cities);
     readColors();
     resize();
     await setClass(S.cls);
     $("loading").remove();
     if (hash.zip && S.byZip.has(hash.zip)) pinZip(S.byZip.get(hash.zip));
+    if (hash.to && S.originZip && S.byZip.has(hash.to)) setDest(S.byZip.get(hash.to));
     status();
   }
 
@@ -206,6 +209,70 @@
       if (d3.geoArea({ type: "Polygon", coordinates: poly }) > 2 * Math.PI) for (const ring of poly) ring.reverse();
   }
 
+  // ---------- city labels ----------
+  // Which map box a point belongs in (same rules as build_data.panel_for).
+  function panelFor(lon, lat) {
+    if (lat > 50 && (lon < -129 || lon > 170)) return 1;
+    if (lon > -179 && lon < -150 && lat > 15 && lat < 30) return 2;
+    if (lon > -69 && lon < -63 && lat > 16 && lat < 20) return 3;
+    if (lon > 140 && lat > 10 && lat < 25) return 4;
+    if (lat < -5 && lon < -160) return 5;
+    return 0;
+  }
+
+  // cities.json rows: [name, lon, lat, tier, population], biggest first.
+  function buildCities(rows) {
+    S.cities = [];
+    for (const [name, lon, lat, tier, pop] of rows) {
+      const p = panelFor(lon, lat);
+      const xy = S.projs[p] && S.projs[p]([lon, lat]);
+      if (!xy) continue;
+      const [[x0, y0], [x1, y1]] = PANELS[p].box;
+      if (xy[0] < x0 || xy[0] > x1 || xy[1] < y0 || xy[1] > y1) continue;
+      S.cities.push({ name, tier, pop, p, x: xy[0], y: xy[1] });
+    }
+  }
+
+  // Tier 1 (major cities) on the national view; regional cities as you zoom in.
+  function drawCities() {
+    if (!S.cities || !S.cities.length) return;
+    const maxTier = S.t.k < 1.8 ? 1 : S.t.k < 5 ? 2 : 3;
+    const placed = [], named = [], C = S.colors;
+    // Small screens: only the biggest metros on the national view.
+    const minPop = S.t.k < 1.8 && S.w < 700 ? 2500000 : 0;
+    const small = S.w < 700;
+    ctx.lineJoin = "round";
+    ctx.textBaseline = "middle";
+    for (const c of S.cities) {
+      if (c.tier > maxTier || c.pop < minPop) continue;
+      // Skip labels in inset boxes that are too small on screen to hold them.
+      if (c.p && (PANELS[c.p].box[1][0] - PANELS[c.p].box[0][0]) * scale() < 150) continue;
+      const [sx, sy] = toScreen(c.x, c.y);
+      if (sx < -40 || sy < -10 || sx > S.w + 40 || sy > S.h + 10) continue;
+      // Twin cities with the same name (Kansas City MO/KS): label only one.
+      if (named.some(q => q[0] === c.name && Math.abs(q[1] - sx) + Math.abs(q[2] - sy) < 60)) continue;
+      const big = c.tier === 1;
+      ctx.font = `${big ? 600 : 500} ${(big ? 12 : 11) - (small ? 1 : 0)}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+      const w = ctx.measureText(c.name).width, h = big ? 13 : 12;
+      // Label to the right of the dot; try the left side if that's taken.
+      let box = null;
+      for (const lx of [sx + 5, sx - 5 - w]) {
+        const b = [lx - 2, sy - h / 2 - 1, lx + w + 2, sy + h / 2 + 1];
+        if (b[0] < 0 || b[2] > S.w) continue;
+        if (!placed.some(q => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1])) { box = b; break; }
+      }
+      if (!box) continue;
+      placed.push(box, [sx - 3, sy - 3, sx + 3, sy + 3]);
+      named.push([c.name, sx, sy]);
+      ctx.beginPath(); ctx.arc(sx, sy, big ? 2.6 : 2, 0, 2 * Math.PI);
+      ctx.fillStyle = C.ink; ctx.fill();
+      ctx.lineWidth = 1.2; ctx.strokeStyle = C.halo; ctx.stroke();
+      ctx.lineWidth = 3; ctx.strokeStyle = C.halo; ctx.strokeText(c.name, box[0] + 2, sy);
+      ctx.fillStyle = C.ink; ctx.fillText(c.name, box[0] + 2, sy);
+    }
+    ctx.textBaseline = "alphabetic";
+  }
+
   function featureAt(vx, vy) {
     const { G, gw, gh, cells } = S.grid;
     const gx = Math.floor(vx / gw), gy = Math.floor(vy / gh);
@@ -236,7 +303,7 @@
       bucket: BUCKETS.map(b => g(b.v)),
       bg: g("--map-bg"), land: g("--land"), ink: g("--ink"), ink2: g("--ink-2"), muted: g("--muted"),
       zip3: g("--line-zip3"), zcta: g("--line-zcta"), state: g("--line-state"), halo: g("--halo"),
-      hair: g("--hair"),
+      hair: g("--hair"), dest: g("--dest"),
     };
   }
 
@@ -298,10 +365,19 @@
     // Origin prefix outline (halo + ink), then the origin ZIP and hovered ZIP.
     if (S.origin != null) outline(prefixOutline(S.origin), 2.6, 1.3);
     if (S.originZip && S.pinned) outline(S.originZip.path, 2.2, 1, true);
-    if (S.hover && S.hover !== S.originZip) outline(S.hover.path, 2, 1);
+    if (S.hover && S.hover !== S.originZip && S.hover !== S.dest) outline(S.hover.path, 2, 1);
+    if (S.dest) outline(S.dest.path, 3, 1.8, false, C.dest);
 
-    // Panel labels (screen-sized text)
+    // City labels and panel labels (screen-sized text)
     ctx.setTransform(d, 0, 0, d, 0, 0);
+    drawCities();
+    if (S.dest) {
+      const [[x0, y0], [x1, y1]] = S.dest.bbox;
+      const [mx, my] = toScreen((x0 + x1) / 2, (y0 + y1) / 2);
+      ctx.beginPath(); ctx.arc(mx, my, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = C.dest; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = C.halo; ctx.stroke();
+    }
     ctx.font = "11px system-ui, -apple-system, 'Segoe UI', sans-serif";
     ctx.fillStyle = C.muted;
     PANELS.forEach((P, p) => {
@@ -326,11 +402,11 @@
     return outlineCache.get(i);
   }
 
-  function outline(path, haloW, inkW, fillMark) {
+  function outline(path, haloW, inkW, fillMark, color) {
     const k = scale();
     ctx.lineJoin = "round";
     ctx.lineWidth = haloW / k; ctx.strokeStyle = S.colors.halo; ctx.stroke(path);
-    ctx.lineWidth = inkW / k; ctx.strokeStyle = S.colors.ink; ctx.stroke(path);
+    ctx.lineWidth = inkW / k; ctx.strokeStyle = color || S.colors.ink; ctx.stroke(path);
     if (fillMark) { ctx.fillStyle = S.colors.ink; ctx.globalAlpha = 0.25; ctx.fill(path, "evenodd"); ctx.globalAlpha = 1; }
   }
   const toScreen = (vx, vy) => [vx * scale() + S.t.x + S.t.k * S.fit.x, vy * scale() + S.t.y + S.t.k * S.fit.y];
@@ -449,6 +525,7 @@
       : "Hover over the map, or click a ZIP to pin it.";
     $("unpin").hidden = !S.pinned;
     perfPanel();
+    tripCard();
   }
 
   function showTip(sx, sy) {
@@ -513,6 +590,7 @@
   }
 
   function pinZip(f, zoomTo) {
+    $("fromZip").value = f.z;
     S.pinned = true;
     setOrigin(f);
     legend(); status(); writeHash(); draw();
@@ -521,6 +599,8 @@
 
   function unpin() {
     S.pinned = false;
+    S.dest = null;
+    $("fromZip").value = ""; $("toZip").value = "";
     setOrigin(S.hover);
     legend(); status(); writeHash(); draw(); showTip();
   }
@@ -583,30 +663,96 @@
     return [[x0, y0], [x1, y1]];
   };
 
-  // ZIP search
-  $("search").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const v = $("zip").value.trim();
+  // ---------- From / To ZIP boxes ----------
+  // Find the drawn ZIP for what was typed. A 3-digit prefix, or a ZIP with no
+  // shape (PO-box only), falls back to a ZIP in the same prefix: same days.
+  function resolveZip(v) {
+    v = (v || "").trim();
+    if (!/^\d{3,5}$/.test(v)) return { f: null, note: v ? `“${v}” isn't a ZIP code.` : "" };
     let f = S.byZip.get(v.padStart(5, "0"));
-    if (!f && /^\d{3}$/.test(v)) f = S.feats.find(x => x.z.startsWith(v));
-    if (!f && /^\d{5}$/.test(v)) f = S.feats.find(x => x.z.startsWith(v.slice(0, 3)));
-    if (!f) { $("status").textContent = `No ZIP shape found for “${v}”. PO-box-only ZIPs have no shape; try a nearby ZIP.`; return; }
-    if (f.z !== v.padStart(5, "0") && v.length === 5) $("status").textContent = `${v} has no shape; using ${f.z} in the same prefix.`;
-    S.hover = f;
-    pinZip(f, true);
+    if (f) return { f, note: "" };
+    f = S.feats.find(x => x.z.startsWith(v.slice(0, 3)));
+    if (!f) return { f: null, note: `No ZIP found for “${v}”.` };
+    return { f, note: v.length === 5 ? `${v} has no map shape (PO-box only?); using ${f.z}, same delivery days.` : "" };
+  }
+
+  function setDest(f, zoom) {
+    S.dest = f || null;
+    $("toZip").value = f ? f.z : "";
+    writeHash(); legend(); draw();
+    if (zoom && f && S.originZip) zoomToPair(S.originZip, f);
+  }
+
+  $("trip").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const from = resolveZip($("fromZip").value), to = resolveZip($("toZip").value);
+    const notes = [from.note, to.note].filter(Boolean);
+    if (from.f) { S.hover = from.f; pinZip(from.f, !to.f); $("fromZip").value = from.f.z; }
+    if (to.f) {
+      if (!from.f && !S.originZip) notes.push("Type a From ZIP too, or click the map to pick one.");
+      setDest(to.f, true);
+    } else if (!$("toZip").value.trim()) setDest(null);
+    if (notes.length) $("status").textContent = notes.join(" ");
   });
+
+  function zoomToPair(a, b) {
+    if (a.p !== b.p) { zoomToFeature(b); return; } // different map boxes: just show the destination
+    const x0 = Math.min(a.bbox[0][0], b.bbox[0][0]), y0 = Math.min(a.bbox[0][1], b.bbox[0][1]);
+    const x1 = Math.max(a.bbox[1][0], b.bbox[1][0]), y1 = Math.max(a.bbox[1][1], b.bbox[1][1]);
+    const fk = S.fit.k;
+    const k = Math.max(1, Math.min(6, 0.7 / Math.max((x1 - x0) * fk / S.w, (y1 - y0) * fk / S.h)));
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const t = d3.zoomIdentity.translate(S.w / 2 - k * (cx * fk + S.fit.x), S.h / 2 - k * (cy * fk + S.fit.y)).scale(k);
+    d3.select(canvas).transition().duration(600).call(zoom.transform, t);
+  }
+
+  // Side-panel card for a typed From -> To trip.
+  function tripCard() {
+    const box = $("tripcard");
+    const a = S.originZip, b = S.dest;
+    if (!S.pinned || !a || !b) { box.hidden = true; return; }
+    const d = S.days[S.cls] ? S.days[S.cls][a.i * S.N + b.i] : 0;
+    const label = S.meta.classes.find(c => c.key === S.cls).label;
+    let big;
+    if (!d) big = `<span class="sw" style="background:${S.colors.bucket[NONE]}"></span>No USPS standard`;
+    else if (S.mailDay != null) {
+      const r = arrival(S.mailDay, d);
+      big = `<span class="sw" style="background:${S.colors.bucket[bkt(r.cal)]}"></span>Arrives ${WEEKDAY_NAMES[r.wd]}`;
+    } else big = `<span class="sw" style="background:${S.colors.bucket[bucketOf(d)]}"></span>${daysText(d)}`;
+    let perf = "";
+    if (S.perf && d) {
+      const from = perfFor(S.zip3[a.i].z, d), to = perfFor(S.zip3[b.i].z, d);
+      if (!S.perf.classes[S.cls]) perf = `<div class="perf-tip muted">No public on-time data for this service</div>`;
+      else {
+        if (from) perf += `<div class="perf-tip">From ${from.name}: ${perfLine(from)}</div>`;
+        if (to && (!from || to.name !== from.name)) perf += `<div class="perf-tip">To ${to.name}: ${perfLine(to)}</div>`;
+      }
+    }
+    const when = S.mailDay != null && d ? `Mailed ${WEEKDAY_NAMES[S.mailDay]} · ${daysText(d)} by USPS count` : "Pick “Mailed on” to see the arrival day";
+    box.innerHTML = `<button class="clear" id="clearTrip">Clear</button>
+      <span class="muted">Trip</span>
+      <div class="route">${a.z} → <span class="to">${b.z}</span></div>
+      <div class="muted">${S.zip3[a.i].s} → ${S.zip3[b.i].s}</div>
+      <div class="big">${big}</div>
+      <div class="muted">${label} · ${when}</div>
+      ${perf}`;
+    box.hidden = false;
+    $("clearTrip").onclick = () => setDest(null);
+  }
 
   // URL hash: #fcm/80202
   function readHash() {
     // #fcm/80202/fri  (ZIP and mailing day are optional; #fcm//fri works too)
-    const [cls, zip, day] = location.hash.replace(/^#/, "").split("/");
+    // #fcm/80302/fri/10001  (class / from ZIP / mailing day / to ZIP; all but the class optional)
+    const [cls, zip, day, to] = location.hash.replace(/^#/, "").split("/");
     const wd = WEEKDAYS.findIndex(w => w.toLowerCase() === (day || "").toLowerCase());
-    return { cls, zip, day: wd >= 0 ? wd : null };
+    return { cls, zip, day: wd >= 0 ? wd : null, to };
   }
   function writeHash() {
     const zip = S.pinned && S.originZip ? S.originZip.z : "";
     const day = S.mailDay == null ? "" : WEEKDAYS[S.mailDay].toLowerCase();
-    const h = `#${S.cls}${zip || day ? "/" + zip : ""}${day ? "/" + day : ""}`;
+    const to = S.dest && zip ? S.dest.z : "";
+    const h = `#${S.cls}${zip || day || to ? "/" + zip : ""}${day || to ? "/" + day : ""}${to ? "/" + to : ""}`;
     if (location.hash !== h) history.replaceState(null, "", h);
   }
 

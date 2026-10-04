@@ -11,8 +11,15 @@ it, then hover other ZIPs to read exact days.
   lower 48, each at its own scale.
 - **Hosting:** plain static files in `web/`, published by GitHub Pages through
   `.github/workflows/usps-transit-map.yml`. No server needed.
-- **Sharing:** the address keeps the view, e.g. `…/#pm/80302` opens Priority
-  Mail pinned on 80302.
+- **From / To boxes:** type two ZIP codes to get a trip card with the delivery
+  days, the arrival weekday (when "Mailed on" is set) and the on-time record.
+- **City labels:** major cities on the full map, regional cities as you zoom
+  in. They come from `web/cities.json`, made by `build/make_cities.py` from
+  Natural Earth (public domain).
+- **Colours:** ColorBrewer OrRd, 7 classes, light (fast) to dark red (slow),
+  with grey for "no standard".
+- **Sharing:** the address keeps the view, e.g. `…/#pm/80302/fri/10001` opens
+  Priority Mail from 80302 to 10001, mailed on a Friday.
 
 ## Data sources
 

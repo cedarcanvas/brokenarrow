@@ -11,14 +11,16 @@
   --accent: #002868;
   --accent-ink: #ffffff;
   --map-bg: #fcfcfb;
-  --land: #e4e1d8;
-  --none: #cfccc3;
-  --line-zip3: rgba(255, 255, 255, 0.75);
-  --line-zcta: rgba(255, 255, 255, 0.45);
+  --land: #e9e9e7;
+  --none: #bdbdbd;
+  --line-zip3: rgba(80, 30, 10, 0.22);
+  --line-zcta: rgba(80, 30, 10, 0.12);
   --line-state: rgba(11, 11, 11, 0.55);
   --halo: #ffffff;
-  --d1: #cbb042; --d2: #83a649; --d3: #259663; --d4: #007e79;
-  --d5: #005f82; --d6: #003c7a; --d7: #271860;
+  /* Delivery-day classes (ColorBrewer OrRd, 7 classes), light = fast, dark red = slow */
+  --d1: #fef0d9; --d2: #fdd49e; --d3: #fdbb84; --d4: #fc8d59;
+  --d5: #ef6548; --d6: #d7301f; --d7: #990000;
+  --dest: #2a78d6;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -35,7 +37,7 @@
     --accent-ink: #0b0b0b;
     --map-bg: #171b20;
     --land: #2f343b;
-    --none: #454a52;
+    --none: #6b6e73;
     --line-zip3: rgba(23, 27, 32, 0.8);
     --line-zcta: rgba(23, 27, 32, 0.45);
     --line-state: rgba(255, 255, 255, 0.6);
@@ -46,7 +48,7 @@
   color-scheme: dark;
   --page: #0f1215; --surface: #171b20; --ink: #ffffff; --ink-2: #b9c2cc; --muted: #8a9198;
   --title: #ffffff; --hair: #2c3036; --border: rgba(255, 255, 255, 0.10);
-  --accent: #6da7ec; --accent-ink: #0b0b0b; --map-bg: #171b20; --land: #2f343b; --none: #454a52;
+  --accent: #6da7ec; --accent-ink: #0b0b0b; --map-bg: #171b20; --land: #2f343b; --none: #6b6e73;
   --line-zip3: rgba(23, 27, 32, 0.8); --line-zcta: rgba(23, 27, 32, 0.45);
   --line-state: rgba(255, 255, 255, 0.6); --halo: #0b0b0b;
 }
@@ -179,3 +181,19 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
   .classes { width: 100%; }
   .classes button { flex: 1; padding: 6px 6px; }
 }
+
+/* Trip: From / To ZIP boxes */
+.trip { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.trip label { padding: 0 2px 0 10px; color: var(--ink-2); font-size: 14px; }
+.trip input { border: 0; background: none; padding: 6px 6px; width: 5.2em; outline: none; font-variant-numeric: tabular-nums; }
+.trip input + label { border-left: 1px solid var(--hair); }
+.trip button { border: 0; border-left: 1px solid var(--border); background: none; padding: 6px 12px; cursor: pointer; color: var(--ink-2); }
+.trip button:hover { color: var(--ink); background: var(--hair); }
+.trip:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tripcard { border-bottom: 1px solid var(--hair); padding-bottom: 12px; margin-bottom: 12px; position: relative; }
+.tripcard .route { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--title); }
+.tripcard .route .to { color: var(--dest); }
+.tripcard .big { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; margin: 6px 0 2px; }
+.tripcard .big .sw { width: 16px; height: 16px; }
+.tripcard .clear { position: absolute; right: 0; top: 0; border: 1px solid var(--border); background: none; border-radius: 7px; padding: 2px 9px; font-size: 12px; cursor: pointer; color: var(--ink-2); }
+.tripcard .perf-tip { font-size: 13px; }
