@@ -91,6 +91,11 @@ jobs:
             python build/build_data.py --demo-days
           fi
 
+      - name: Add USPS on-time performance (optional)
+        # Quarterly district results from about.usps.com; never fails the build.
+        continue-on-error: true
+        run: python build/fetch_performance.py
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: tools/usps_transit_map/web

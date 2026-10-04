@@ -64,6 +64,7 @@
     <h2 class="legend-title"><span id="className">First-Class Mail</span> · <span id="units">USPS delivery days</span></h2>
     <ul class="legend" id="legend" aria-live="polite"></ul>
     <p class="legend-note">Counts are ZIP codes reached in each number of days.</p>
+    <div class="perf" id="perf" hidden></div>
   </aside>
 </main>
 
@@ -80,9 +81,15 @@
         50 miles from their regional processing plant, so a few ZIPs may be one day slower than shown.
         Check a specific pair at <a href="https://www.usps.com/service-standards/">usps.com/service-standards</a>.</li>
       <li><strong>Mailing day:</strong> USPS counts delivery days starting the day after your mail is
-        accepted and skips Sundays and federal holidays. Picking a day under “Mailed on” turns that count into
-        calendar days: a 3-day letter mailed Friday arrives Tuesday (4 calendar days). Mail dropped in a box after
+        accepted and skips Sundays and federal holidays. Picking a day under “Mailed on” shows the day of the
+        week it should arrive: a 3-day letter mailed Friday arrives Tuesday. Mail dropped in a box after
         the last pickup, or on Sunday, is accepted the next business day. Holidays add a day and are not shown.</li>
+      <li><strong>How often it's on time:</strong> USPS's own quarterly
+        <a href="https://about.usps.com/what/performance/service-performance/">service performance reports</a>,
+        by district (Periodicals: by area). They show the share of mail delivered within the target, and within
+        1 and 3 extra days. Letters use the Single-Piece First-Class Mail results; Marketing Mail uses end-to-end
+        results. USPS publishes no regional results for Priority Mail or Ground Advantage. Districts come from
+        USPS's <a href="https://about.usps.com/what/performance/service-performance/zip-3-by-area-district.htm">ZIP-to-district list</a>.</li>
       <li><strong>ZIP shapes:</strong> U.S. Census Bureau 2020 ZIP Code Tabulation Areas. They approximate ZIP codes;
         PO-box-only ZIPs have no shape.</li>
       <li><strong>Map:</strong> Equal Earth projection, which keeps areas true. Alaska, Hawaii and the territories
