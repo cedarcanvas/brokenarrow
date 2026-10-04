@@ -17,6 +17,12 @@ it, then hover other ZIPs to read exact days.
   Detail spreadsheet in the build and writes `web/data/zipnames.json`. The
   From / To boxes also accept city names. Without that file, ZIPs show the
   nearest labelled city ("near Denver").
+- **Mail plants:** `build/fetch_hubs.py` reads USPS's Facility File in the
+  build and writes `web/data/hubs.json`: processing plants (squares) and
+  package network hubs (diamonds). The side panel shows the nearest plant to
+  each ZIP. USPS doesn't publish which plant serves which ZIP, so this is the
+  closest one, not necessarily the one your mail goes through. A checkbox
+  under the legend hides them.
 - **Side panel:** on-time meters at the top, then the hover/trip readout
   (it replaces the floating tooltip), then the legend with a distribution bar
   per class. Hover a legend row to spotlight those ZIPs.
@@ -34,6 +40,7 @@ it, then hover other ZIPs to read exact days.
 |---|---|---|
 | Delivery days | [USPS PostalPro – Service Standards](https://postalpro.usps.com/service-standards) | Free download. Days between every pair of 3-digit ZIP prefixes, per mail class. Updated every quarter. |
 | ZIP shapes | [Census 2020 ZCTAs, `cb_2020_us_zcta520_500k.zip`](https://www2.census.gov/geo/tiger/GENZ2020/shp/) | Public domain. ~33,800 shapes. PO-box-only ZIPs have no shape. |
+| Mail plants | [USPS PostalPro – Facility File](https://postalpro.usps.com/service-hubs-and-facilities/facilityfile) | Every USPS facility with type and ZIP. The current file is dated Feb 2019, so some plants may have changed. |
 | State lines | [`us-atlas`](https://github.com/topojson/us-atlas) npm package (Census data) | ISC licence. |
 
 **Limits worth knowing** (also shown on the page):

@@ -64,11 +64,21 @@
       <span class="muted">Origin</span>
       <div class="origin-zip" id="originZip">—</div>
       <div class="origin-meta" id="originMeta">Hover over the map, or click a ZIP to pin it.</div>
+      <div class="origin-hub" id="originHub" hidden></div>
       <button id="unpin" class="unpin" hidden>Unpin</button>
     </div>
     <h2 class="legend-title"><span id="className">First-Class Mail</span> · <span id="units">USPS delivery days</span></h2>
     <ul class="legend" id="legend"></ul>
     <p class="legend-note">Bars: ZIP codes reached in each class. Hover a row to spotlight it on the map.</p>
+    <div class="hubkey" id="hubkey" hidden>
+      <label><input type="checkbox" id="showHubs" checked> Show USPS mail plants</label>
+      <div class="hubkinds">
+        <span><span class="hubmark"></span>Processing plant</span>
+        <span><span class="hubmark dia"></span>Package hub</span>
+      </div>
+      <p class="legend-note">Plants sort mail for the area around them. USPS doesn't publish which plant serves each ZIP,
+        so the panel shows the nearest one.<span id="hubDate"></span></p>
+    </div>
   </aside>
 </main>
 
@@ -96,6 +106,13 @@
         USPS's <a href="https://about.usps.com/what/performance/service-performance/zip-3-by-area-district.htm">ZIP-to-district list</a>.</li>
       <li><strong>ZIP city names:</strong> USPS <a href="https://postalpro.usps.com/ZIP_Locale_Detail">ZIP Code Locale Detail</a>
         (post office city for each ZIP). You can type a city name in the From / To boxes.</li>
+      <li><strong>Mail plants:</strong> USPS PostalPro
+        <a href="https://postalpro.usps.com/service-hubs-and-facilities/facilityfile">Facility File</a>:
+        Processing &amp; Distribution Centers and Facilities (squares) and Network / Regional Distribution Centers
+        for packages (diamonds), each placed at the middle of its ZIP code. The file is older than the delivery days
+        and USPS has opened and merged plants since, so a few may be out of date. USPS does not publish which plant
+        handles each ZIP, so “nearest mail plant” is the closest one as the crow flies, a good guess but not always
+        the one your mail goes through.</li>
       <li><strong>City labels:</strong> <a href="https://www.naturalearthdata.com/">Natural Earth</a> populated places
         (public domain). Major cities show on the full map; more appear as you zoom in.</li>
       <li><strong>ZIP shapes:</strong> U.S. Census Bureau 2020 ZIP Code Tabulation Areas. They approximate ZIP codes;

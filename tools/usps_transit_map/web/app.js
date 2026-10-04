@@ -68,6 +68,7 @@
     t: d3.zoomIdentity,
     fit: { k: 1, x: 0, y: 0 },
     colors: {},
+    hubs: null, showHubs: true, hoverHub: null,
   };
 
   const canvas = document.getElementById("map");
@@ -105,6 +106,11 @@
     fetch("data/zipnames.json").then(r => (r.ok ? r.json() : null)).then((n) => {
       if (!n) return;
       S.names = n; buildCityIndex(); legend();
+    }).catch(() => {});
+    // Optional: USPS mail processing plants (made by build/fetch_hubs.py).
+    fetch("data/hubs.json").then(r => (r.ok ? r.json() : null)).then((h) => {
+      if (!h || !h.h || !h.h.length) return;
+      buildHubs(h); legend(); draw();
     }).catch(() => {});
     if (hash.zip && S.byZip.has(hash.zip)) pinZip(S.byZip.get(hash.zip));
     if (hash.to && S.originZip && S.byZip.has(hash.to)) setDest(S.byZip.get(hash.to));
@@ -239,10 +245,10 @@
   }
 
   // Tier 1 (major cities) on the national view; regional cities as you zoom in.
-  function drawCities() {
+  function drawCities(placed = []) {
     if (!S.cities || !S.cities.length) return;
     const maxTier = S.t.k < 1.8 ? 1 : S.t.k < 5 ? 2 : 3;
-    const placed = [], named = [], C = S.colors;
+    const named = [], C = S.colors;
     // Small screens: only the biggest metros on the national view.
     const minPop = S.t.k < 1.8 && S.w < 700 ? 2500000 : 0;
     const small = S.w < 700;
@@ -276,6 +282,102 @@
       ctx.fillStyle = C.ink; ctx.fillText(c.name, box[0] + 2, sy);
     }
     ctx.textBaseline = "alphabetic";
+  }
+
+  // ---------- postal hubs ----------
+  // data/hubs.json rows: [name, kind, city, ST, lon, lat]. Kind "P" = processing
+  // plant (sorts the mail for an area), "N" = network hub for packages.
+  function buildHubs(h) {
+    S.hubInfo = { date: h.date };
+    S.hubs = [];
+    for (const [name, kind, city, st, lon, lat] of h.h) {
+      const p = panelFor(lon, lat);
+      const xy = S.projs[p] && S.projs[p]([lon, lat]);
+      if (!xy) continue;
+      S.hubs.push({ name, kind, city, st, lon, lat, p, x: xy[0], y: xy[1] });
+    }
+    // Draw network hubs last so their bigger markers sit on top.
+    S.hubs.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "N" ? 1 : -1));
+    $("hubkey").hidden = false;
+    $("hubDate").textContent = h.date ? ` USPS list dated ${h.date}.` : "";
+  }
+
+  // Nearest processing plant to a ZIP (USPS doesn't publish which plant serves
+  // which ZIP, so this is "nearest", not "assigned"). Miles as the crow flies.
+  function nearestHub(f) {
+    if (!S.hubs || !f) return null;
+    if (f._hub === undefined) {
+      const [[x0, y0], [x1, y1]] = f.bbox;
+      const ll = S.projs[f.p].invert([(x0 + x1) / 2, (y0 + y1) / 2]);
+      let best = null, bd = Infinity;
+      for (const h of S.hubs) {
+        if (h.kind !== "P") continue;
+        const dd = d3.geoDistance(ll, [h.lon, h.lat]);
+        if (dd < bd) { bd = dd; best = h; }
+      }
+      f._hub = best ? { h: best, mi: Math.round(bd * 3958.8) } : null;
+    }
+    return f._hub;
+  }
+  const hubText = (n) => n ? `${n.h.name} · ${n.mi < 1 ? "under 1" : n.mi} mi` : "";
+
+  // Markers: small squares for plants, larger diamonds for network hubs. Names
+  // show when zoomed in (hubs first, then plants), or for the hovered marker.
+  // Returns the label boxes so city labels can avoid them.
+  function drawHubs() {
+    const placed = [];
+    if (!S.hubs || !S.showHubs) return placed;
+    const C = S.colors, k = S.t.k;
+    const near = S.originZip && S.pinned ? nearestHub(S.originZip) : null;
+    const labels = [];
+    for (const h of S.hubs) {
+      if (h.p && (PANELS[h.p].box[1][0] - PANELS[h.p].box[0][0]) * scale() < 60) continue;
+      const [sx, sy] = toScreen(h.x, h.y);
+      if (sx < -10 || sy < -10 || sx > S.w + 10 || sy > S.h + 10) continue;
+      const r = (h.kind === "N" ? 5 : 3.5) + (k >= 3 ? 0.5 : 0);
+      ctx.beginPath();
+      if (h.kind === "N") { ctx.moveTo(sx, sy - r); ctx.lineTo(sx + r, sy); ctx.lineTo(sx, sy + r); ctx.lineTo(sx - r, sy); ctx.closePath(); }
+      else ctx.rect(sx - r, sy - r, 2 * r, 2 * r);
+      ctx.fillStyle = C.hub; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = "#fff"; ctx.stroke();
+      placed.push([sx - r, sy - r, sx + r, sy + r]);
+      const show = h === S.hoverHub || (near && h === near.h) || (h.kind === "N" ? k >= 2.5 : k >= 4);
+      if (show) labels.push([h, sx, sy, r]);
+    }
+    // Hovered and "nearest" labels first so they always win a spot.
+    labels.sort((a, b) => (b[0] === S.hoverHub) - (a[0] === S.hoverHub) || (near && (b[0] === near.h) - (a[0] === near.h)));
+    ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+    ctx.font = "italic 500 11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+    for (const [h, sx, sy, r] of labels) {
+      const w = ctx.measureText(h.name).width, must = h === S.hoverHub || (near && h === near.h);
+      let box = null;
+      for (const lx of [sx + r + 4, sx - r - 4 - w]) {
+        const b = [lx - 2, sy - 7, lx + w + 2, sy + 7];
+        if (b[0] < 0 || b[2] > S.w) continue;
+        if (must || !placed.some(q => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1])) { box = b; break; }
+      }
+      if (!box) continue;
+      placed.push(box);
+      ctx.lineWidth = 3; ctx.strokeStyle = C.halo; ctx.strokeText(h.name, box[0] + 2, sy);
+      ctx.fillStyle = C.ink; ctx.fillText(h.name, box[0] + 2, sy);
+    }
+    ctx.textBaseline = "alphabetic";
+    return placed;
+  }
+
+  const KIND_NAMES = { P: "Mail processing plant", N: "Network distribution center (packages)" };
+  const hubTitle = (h) => `${h.name} — ${KIND_NAMES[h.kind]}, ${h.city}, ${h.st}`;
+
+  // The hub marker under the pointer (screen pixels), if any.
+  function hubAt(sx, sy) {
+    if (!S.hubs || !S.showHubs) return null;
+    let best = null, bd = 49;
+    for (const h of S.hubs) {
+      const [hx, hy] = toScreen(h.x, h.y);
+      const dd = (hx - sx) ** 2 + (hy - sy) ** 2;
+      if (dd < bd) { bd = dd; best = h; }
+    }
+    return best;
   }
 
   // ---------- ZIP -> city names ----------
@@ -368,7 +470,7 @@
       bucket: BUCKETS.map(b => g(b.v)),
       bg: g("--map-bg"), land: g("--land"), ink: g("--ink"), ink2: g("--ink-2"), muted: g("--muted"),
       zip3: g("--line-zip3"), zcta: g("--line-zcta"), state: g("--line-state"), halo: g("--halo"),
-      hair: g("--hair"), dest: g("--dest"),
+      hair: g("--hair"), dest: g("--dest"), hub: g("--hub"),
     };
   }
 
@@ -437,7 +539,7 @@
 
     // City labels and panel labels (screen-sized text)
     ctx.setTransform(d, 0, 0, d, 0, 0);
-    drawCities();
+    drawCities(drawHubs());
     if (S.dest) {
       const [[x0, y0], [x1, y1]] = S.dest.bbox;
       const [mx, my] = toScreen((x0 + x1) / 2, (y0 + y1) / 2);
@@ -614,6 +716,9 @@
       ? `${cityOf(oz)} · ${o.s || "—"} · prefix ${o.z}xx${S.pinned ? " · pinned" : ""}`
       : "Hover over the map, or click a ZIP to pin it.";
     $("unpin").hidden = !S.pinned;
+    const nh = nearestHub(oz);
+    $("originHub").hidden = !nh;
+    if (nh) $("originHub").innerHTML = `<span class="hubmark"></span>Nearest mail plant: ${esc(hubText(nh))}`;
     perfPanel();
     readout();
   }
@@ -653,6 +758,7 @@
       <span class="muted cap">${isTrip ? "Trip" : "Hovered"} · ${esc(label)}</span>
       <div class="route">${a.z} → <span class="to">${t.z}</span></div>
       <div class="cities">${esc(cityOf(a))} → ${esc(cityOf(t))}</div>
+      ${nearestHub(a) && nearestHub(t) ? `<div class="plants"><span class="hubmark"></span>Nearest plants: ${esc(nearestHub(a).h.name)} → ${esc(nearestHub(t).h.name)}</div>` : ""}
       <div class="hero"><span class="sw" style="background:${sw}"></span>${esc(value)}</div>
       <div class="muted">${esc(cap)}${S.mailDay == null && d ? ` · pick “Mailed on” for the weekday` : ""}</div>`;
     if (isTrip) $("clearTrip").onclick = () => setDest(null);
@@ -697,6 +803,8 @@
     const r = canvas.getBoundingClientRect();
     const sx = ev.clientX - r.left, sy = ev.clientY - r.top;
     const f = featureAt(...toVirtual(sx, sy));
+    const hh = hubAt(sx, sy);
+    if (hh !== S.hoverHub) { S.hoverHub = hh; canvas.title = hh ? hubTitle(hh) : ""; draw(); }
     if (f !== S.hover) {
       S.hover = f;
       if (!S.pinned && f) setOrigin(f);
@@ -707,7 +815,7 @@
 
   canvas.addEventListener("pointermove", (ev) => { if (ev.pointerType === "mouse" || ev.buttons === 0) onMove(ev); });
   canvas.addEventListener("pointerleave", () => {
-    S.hover = null; tip.hidden = true;
+    S.hover = null; S.hoverHub = null; tip.hidden = true;
     if (!S.pinned) setOrigin(null);
     legend(); draw();
   });
@@ -721,6 +829,7 @@
     showTip();
   });
   $("unpin").addEventListener("click", unpin);
+  $("showHubs").addEventListener("change", (e) => { S.showHubs = e.target.checked; S.hoverHub = null; draw(); });
   window.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.pinned) unpin(); });
 
   // Zoom and pan
