@@ -1,0 +1,86 @@
+# USPS Delivery Days map
+
+A web map you can host. Hover over any ZIP code and every other ZIP code is
+colored by how many days USPS expects mail to take from it: 1 day, 2 days,
+3 days and so on. Switch between letters (First-Class Mail), Ground
+Advantage, Priority Mail, Marketing Mail and Periodicals. Click a ZIP to pin
+it, then hover other ZIPs to read exact days.
+
+- **Projection:** Equal Earth (areas are true). Alaska, Hawaii, Puerto Rico &
+  USVI, Guam & N. Mariana Is. and American Samoa sit in boxes below the
+  lower 48, each at its own scale.
+- **Hosting:** plain static files in `web/`, published by GitHub Pages through
+  `.github/workflows/usps-transit-map.yml`. No server needed.
+- **Sharing:** the address keeps the view, e.g. `…/#pm/80302` opens Priority
+  Mail pinned on 80302.
+
+## Data sources
+
+| What | Source | Notes |
+|---|---|---|
+| Delivery days | [USPS PostalPro – Service Standards](https://postalpro.usps.com/service-standards) | Free download. Days between every pair of 3-digit ZIP prefixes, per mail class. Updated every quarter. |
+| ZIP shapes | [Census 2020 ZCTAs, `cb_2020_us_zcta520_500k.zip`](https://www2.census.gov/geo/tiger/GENZ2020/shp/) | Public domain. ~33,800 shapes. PO-box-only ZIPs have no shape. |
+| State lines | [`us-atlas`](https://github.com/topojson/us-atlas) npm package (Census data) | ISC licence. |
+
+**Limits worth knowing** (also shown on the page):
+
+- Days are USPS *targets*, not guarantees.
+- Days are looked up by 3-digit prefix, so all ZIPs in a prefix share a color.
+  Since 2025 USPS adds one day for some ZIPs more than 50 miles from their
+  regional plant, so a few ZIPs may really be a day slower than shown.
+- Since 1 Oct 2026, Ground Advantage to/from Alaska, Hawaii and the territories
+  is 10+ days (surface transport).
+
+## Updating the data (every USPS quarter)
+
+1. Download the service-standard files from PostalPro (see `raw/usps/README.md`)
+   and put them in `raw/usps/`. Zip files are fine. Optionally write the data
+   date, e.g. `FY2027 Q1`, into `raw/usps/vintage.txt`.
+2. Commit and push to `main`. The GitHub Action downloads the Census shapes,
+   runs the build, and publishes the site.
+
+Until real USPS files are in `raw/usps/`, the Action builds with **made-up demo
+days** and the page shows a yellow "Demo data" banner.
+
+## Building on your own computer
+
+You need Python 3.10+ and Node 18+.
+
+```bash
+cd tools/usps_transit_map
+pip install -r build/requirements.txt        # geopandas etc.
+(cd build && npm install)                    # mapshaper + us-atlas
+curl -o raw/census/cb_2020_us_zcta520_500k.zip \
+  https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_us_zcta520_500k.zip
+python build/build_data.py                   # or add --demo-days to preview
+cd web && python -m http.server 8000         # open http://localhost:8000
+```
+
+`build_data.py` prints what it found in each USPS file (which columns it used
+for origin, destination, days and mail class) and warns about gaps. If it
+can't work out the columns, add `raw/usps/columns.json`, for example:
+
+```json
+{ "origin": "ORIG_ZIP3", "dest": "DEST_ZIP3", "days": "SVC_STD_DAYS", "class": "MAIL_CLASS" }
+```
+
+Other keys: `"delimiter": "|"`, `"names": [...]` (for files with no header
+row), `"file_classes": {"file.txt": "pm"}` and `"class_values": {"3": "fcm"}`.
+Class keys are `fcm`, `ga`, `pm`, `mkt`, `per`. Files with 5-digit ZIPs are
+fine too: the build uses the most common value for each prefix pair.
+
+`build/make_demo_zcta.py` makes rough fake ZIP shapes from ZIP center points,
+for testing without the Census download. Don't publish those.
+
+## How it works
+
+- `build/build_data.py` simplifies the ZIP shapes with mapshaper to TopoJSON
+  (~6 MB, ~1.4 MB gzipped). It writes one ~900 × 900 table of days per mail
+  class as raw bytes (`days_<class>.bin`, 0.8 MB each, loaded only when you pick
+  that class).
+- `web/app.js` uses D3 to draw on a `<canvas>`. Every ZIP is projected once
+  into a `Path2D`. A repaint fills one combined shape per 3-digit prefix
+  (~900 fills), so hovering stays fast. Hover lookups use a grid of bounding
+  boxes plus `isPointInPath`.
+- D3 v7.9.0 and topojson-client 3.1.0 are copied into `web/vendor/`, so the
+  site has no outside dependencies.
