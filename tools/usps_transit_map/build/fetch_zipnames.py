@@ -83,26 +83,55 @@ def zip_names():
 
 
 def probe_hubs():
-    """Print what USPS's 3-digit facility lists look like (for a future hub layer)."""
+    """Print what USPS's labeling lists look like (for the postal-hub layer)."""
     print("\nProbe: postal hub sources")
-    for page in ("https://postalpro.usps.com/mailing/labeling-lists",
-                 "https://postalpro.usps.com/labeling-lists",
-                 "https://postalpro.usps.com/service-standards/3d-base"):
-        try:
-            links = page_links(page)
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            print(f"  - {page}: {e}")
+    page = "https://postalpro.usps.com/operations/labeling-lists"
+    try:
+        links = page_links(page)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        print(f"  - {page}: {e}")
+        return
+    print(f"  + {page}: {len(links)} links")
+    subs = []
+    for u, t in links:
+        if "postalpro" in u and re.search(r"label|L0\d\d|L6\d\d|L2\d\d|scf|ndc|facility", u + " " + t, re.I):
+            print(f"     {t[:80]!r} -> {u}")
+            subs.append(u)
+    # Follow pages that look like L005 / L002 / L006 lists and show their files.
+    for u in dict.fromkeys(subs):
+        if not re.search(r"L00[1-9]|L005|L002|scf", u, re.I) or re.search(r"\.(zip|xlsx?|txt|pdf)$", u, re.I):
             continue
-        print(f"  + {page}: {len(links)} links")
-        for u, t in links:
-            if re.search(r"L005|L002|labeling|SCF|3D_Base|\.zip$|\.xlsx?$|\.txt$", u + " " + t, re.I):
-                print(f"     {t[:70]!r} -> {u}")
-                if re.search(r"3D_Base.*\.zip$", u):
-                    data, _, _ = get(u, timeout=300)
-                    with zipfile.ZipFile(io.BytesIO(data)) as zf:
-                        name = zf.namelist()[0]
-                        head = zf.read(name)[:600].decode("utf-8", "replace")
-                        print(f"     {name} first lines:\n       " + "\n       ".join(head.splitlines()[:5]))
+        try:
+            more = page_links(u)
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            print(f"   - {u}: {e}")
+            continue
+        for u2, t2 in more:
+            if re.search(r"\.(zip|xlsx?|txt|csv)$", u2, re.I):
+                print(f"   file on {u}: {t2[:60]!r} -> {u2}")
+                show_file(u2)
+
+
+def show_file(url):
+    try:
+        data, _, _ = get(url, timeout=120)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        print(f"     ! {e}")
+        return
+    blobs = []
+    if data[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            for n in zf.namelist()[:3]:
+                blobs.append((n, zf.read(n)))
+    else:
+        blobs.append((url.rsplit("/", 1)[-1], data))
+    for name, b in blobs:
+        if name.lower().endswith((".xlsx", ".xls")):
+            for sh, df in pd.read_excel(io.BytesIO(b), sheet_name=None, dtype=str, header=None).items():
+                print(f"     {name} [{sh}] {df.shape}:\n" + df.head(8).to_string(max_colwidth=40))
+        else:
+            txt = b[:1500].decode("latin-1", "replace")
+            print(f"     {name} ({len(b):,} bytes) first lines:\n       " + "\n       ".join(txt.splitlines()[:10]))
 
 
 if __name__ == "__main__":
