@@ -85,9 +85,7 @@ def zip_names():
 def probe_hubs():
     """Print what USPS's facility file / hub location pages hold (for the hub layer)."""
     print("\nProbe: postal hub sources")
-    for page in ("https://postalpro.usps.com/service-hubs-and-facilities/facilityfile",
-                 "https://postalpro.usps.com/node/619",
-                 "https://postalpro.usps.com/node/1168"):
+    for page in ("https://postalpro.usps.com/service-hubs-and-facilities/facilityfile",):
         try:
             links = page_links(page)
         except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -107,7 +105,7 @@ def show_file(url):
         print(f"     ! {e}")
         return
     blobs = []
-    if data[:2] == b"PK":
+    if data[:2] == b"PK" and not url.lower().endswith((".xlsx", ".xls")):
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             for n in zf.namelist()[:3]:
                 blobs.append((n, zf.read(n)))
@@ -118,7 +116,12 @@ def show_file(url):
             print(f"     {name}: PDF, {len(b):,} bytes")
         elif name.lower().endswith((".xlsx", ".xls")):
             for sh, df in pd.read_excel(io.BytesIO(b), sheet_name=None, dtype=str, header=None).items():
-                print(f"     {name} [{sh}] {df.shape}:\n" + df.head(8).to_string(max_colwidth=40))
+                print(f"     {name} [{sh}] {df.shape}:\n" + df.head(12).to_string(max_colwidth=40))
+                # Short value counts for columns that look like categories.
+                for c in df.columns:
+                    vc = df[c].value_counts()
+                    if 1 < len(vc) <= 40:
+                        print(f"       col {c}: {dict(vc.head(40))}")
         else:
             txt = b[:1500].decode("latin-1", "replace")
             print(f"     {name} ({len(b):,} bytes) first lines:\n       " + "\n       ".join(txt.splitlines()[:10]))
