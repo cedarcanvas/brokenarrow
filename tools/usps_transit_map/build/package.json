@@ -1,0 +1,9 @@
+{
+  "name": "usps-transit-map-build",
+  "private": true,
+  "description": "Node tools used by build_data.py (shape simplification and state outlines)",
+  "dependencies": {
+    "mapshaper": "^0.7.72",
+    "us-atlas": "^3.0.1"
+  }
+}

@@ -12,3 +12,10 @@ tools/RiverREM/
 
 __pycache__/
 *.pyc
+
+# USPS delivery-days map: downloads and generated data (rebuild with build/build_data.py)
+tools/usps_transit_map/build/node_modules/
+tools/usps_transit_map/raw/census/*
+!tools/usps_transit_map/raw/census/README.md
+tools/usps_transit_map/raw/demo/
+tools/usps_transit_map/web/data/

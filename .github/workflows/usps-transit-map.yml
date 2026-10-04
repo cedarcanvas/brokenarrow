@@ -1,0 +1,110 @@
+# Builds the USPS Delivery Days map and publishes it with GitHub Pages.
+# One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+name: USPS delivery-days map
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/usps_transit_map/**"
+      - ".github/workflows/usps-transit-map.yml"
+  pull_request:
+    paths:
+      - "tools/usps_transit_map/**"
+      - ".github/workflows/usps-transit-map.yml"
+  schedule:
+    # Monthly refresh so new quarterly USPS data is picked up (07:17 UTC on the 3rd).
+    - cron: "17 7 3 * *"
+  workflow_dispatch:
+    inputs:
+      demo:
+        description: "Use made-up demo days even if USPS files are present"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: usps-transit-map-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: tools/usps_transit_map
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tools/usps_transit_map/build/requirements.txt
+      - run: pip install -r build/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/usps_transit_map/build/package-lock.json
+      - run: npm ci
+        working-directory: tools/usps_transit_map/build
+
+      - name: Cache Census ZIP shapes
+        uses: actions/cache@v4
+        with:
+          path: tools/usps_transit_map/raw/census/cb_2020_us_zcta520_500k.zip
+          key: census-zcta-cb2020-500k
+
+      - name: Download Census ZIP shapes
+        run: |
+          f=raw/census/cb_2020_us_zcta520_500k.zip
+          if [ ! -s "$f" ]; then
+            curl -fsSL --retry 4 -o "$f" https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_us_zcta520_500k.zip
+          fi
+          ls -la raw/census
+
+      - name: Fetch USPS service standards
+        # Only when no USPS files are committed in raw/usps/ - files added by hand always win.
+        run: |
+          if find raw/usps -type f ! -iname 'readme.md' ! -iname 'columns.json' ! -iname 'vintage.txt' ! -name '.*' | grep -q .; then
+            echo "Using the USPS files committed in raw/usps/"
+          else
+            python build/fetch_usps.py
+          fi
+          ls -la raw/usps
+
+      - name: Build map data
+        run: |
+          if [ "${{ inputs.demo }}" = "true" ] || ! find raw/usps -type f ! -iname 'readme.md' ! -iname 'columns.json' ! -iname 'vintage.txt' ! -name '.*' | grep -q .; then
+            echo "::warning::No USPS service-standard files in raw/usps - building with DEMO days."
+            python build/build_data.py --demo-days
+          elif ! python build/build_data.py; then
+            # On pull requests, fail loudly so the problem gets fixed. On main, keep the
+            # site up with demo days (and its banner) rather than publishing nothing.
+            if [ "${{ github.event_name }}" = "pull_request" ]; then exit 1; fi
+            echo "::warning::Could not read the USPS files - building with DEMO days. See the log above."
+            python build/build_data.py --demo-days
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: tools/usps_transit_map/web
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

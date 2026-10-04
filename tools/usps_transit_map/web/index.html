@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>USPS Delivery Days</title>
+<meta name="description" content="Hover over any ZIP code to see how many days USPS takes to deliver letters and packages to every other ZIP code in the U.S.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="title">
+    <h1>USPS Delivery Days</h1>
+    <p class="sub">Hover over a ZIP code to see delivery days to the rest of the country.</p>
+  </div>
+  <div class="controls">
+    <div class="classes" role="radiogroup" aria-label="Mail class" id="classes"></div>
+    <form class="search" id="search" autocomplete="off">
+      <label for="zip" class="vh">Find a ZIP code</label>
+      <input id="zip" name="zip" inputmode="numeric" pattern="[0-9]{3,5}" maxlength="5" placeholder="ZIP code">
+      <button type="submit">Go</button>
+    </form>
+  </div>
+</header>
+
+<div class="demo" id="demo" hidden>
+  <strong>Demo data.</strong> These days are made up from distance so the map can be previewed.
+  They are <em>not</em> USPS service standards.
+</div>
+
+<main class="wrap">
+  <section class="mapbox" aria-label="Map">
+    <canvas id="map" tabindex="0" aria-describedby="status"></canvas>
+    <div class="tip" id="tip" role="status" hidden></div>
+    <div class="loading" id="loading">Loading map…</div>
+    <div class="zoombtns">
+      <button id="zin" aria-label="Zoom in">+</button>
+      <button id="zout" aria-label="Zoom out">−</button>
+      <button id="zreset" aria-label="Reset view">⟲</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="origin" id="origin">
+      <span class="muted">Origin</span>
+      <div class="origin-zip" id="originZip">—</div>
+      <div class="origin-meta" id="originMeta">Hover over the map, or click a ZIP to pin it.</div>
+      <button id="unpin" class="unpin" hidden>Unpin</button>
+    </div>
+    <h2 class="legend-title"><span id="className">First-Class Mail</span> · days in transit</h2>
+    <ul class="legend" id="legend" aria-live="polite"></ul>
+    <p class="legend-note">Counts are ZIP codes reached in each number of days.</p>
+  </aside>
+</main>
+
+<footer class="foot">
+  <p id="status" class="status"></p>
+  <details>
+    <summary>About this map, sources and limits</summary>
+    <ul>
+      <li><strong>Delivery days:</strong> USPS service standards from
+        <a href="https://postalpro.usps.com/service-standards">PostalPro</a>.
+        These are USPS's own <em>targets</em>, from the day mail is accepted. Real delivery can be slower.</li>
+      <li><strong>Accuracy:</strong> days are looked up by the first three digits of each ZIP code, so every ZIP
+        that shares a prefix gets the same color. Since 2025, USPS adds one day for some ZIPs more than
+        50 miles from their regional processing plant, so a few ZIPs may be one day slower than shown.
+        Check a specific pair at <a href="https://www.usps.com/service-standards/">usps.com/service-standards</a>.</li>
+      <li><strong>ZIP shapes:</strong> U.S. Census Bureau 2020 ZIP Code Tabulation Areas. They approximate ZIP codes;
+        PO-box-only ZIPs have no shape.</li>
+      <li><strong>Map:</strong> Equal Earth projection, which keeps areas true. Alaska, Hawaii and the territories
+        are shown in separate boxes, each at its own scale.</li>
+    </ul>
+  </details>
+  <p class="credit">Made by <a href="https://ridgelinemaps.com">Ridgeline Maps</a> · <span id="vintage"></span></p>
+</footer>
+
+<script src="vendor/d3.min.js"></script>
+<script src="vendor/topojson-client.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
