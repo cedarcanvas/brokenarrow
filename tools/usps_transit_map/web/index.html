@@ -31,10 +31,11 @@
     </label>
     <form class="trip" id="trip" autocomplete="off" aria-label="Look up a trip">
       <label for="fromZip">From</label>
-      <input id="fromZip" name="from" inputmode="numeric" pattern="[0-9]{3,5}" maxlength="5" placeholder="ZIP">
+      <input id="fromZip" name="from" list="zipcities" placeholder="ZIP or city">
       <label for="toZip">To</label>
-      <input id="toZip" name="to" inputmode="numeric" pattern="[0-9]{3,5}" maxlength="5" placeholder="ZIP">
+      <input id="toZip" name="to" list="zipcities" placeholder="ZIP or city">
       <button type="submit">Go</button>
+      <datalist id="zipcities"></datalist>
     </form>
   </div>
 </header>
@@ -57,7 +58,8 @@
   </section>
 
   <aside class="side">
-    <div class="tripcard" id="tripcard" hidden></div>
+    <div class="perf" id="perf" hidden></div>
+    <div class="readout" id="readout" aria-live="polite"></div>
     <div class="origin" id="origin">
       <span class="muted">Origin</span>
       <div class="origin-zip" id="originZip">—</div>
@@ -65,9 +67,8 @@
       <button id="unpin" class="unpin" hidden>Unpin</button>
     </div>
     <h2 class="legend-title"><span id="className">First-Class Mail</span> · <span id="units">USPS delivery days</span></h2>
-    <ul class="legend" id="legend" aria-live="polite"></ul>
-    <p class="legend-note">Counts are ZIP codes reached in each number of days.</p>
-    <div class="perf" id="perf" hidden></div>
+    <ul class="legend" id="legend"></ul>
+    <p class="legend-note">Bars: ZIP codes reached in each class. Hover a row to spotlight it on the map.</p>
   </aside>
 </main>
 
@@ -93,6 +94,8 @@
         1 and 3 extra days. Letters use the Single-Piece First-Class Mail results; Marketing Mail uses end-to-end
         results. USPS publishes no regional results for Priority Mail or Ground Advantage. Districts come from
         USPS's <a href="https://about.usps.com/what/performance/service-performance/zip-3-by-area-district.htm">ZIP-to-district list</a>.</li>
+      <li><strong>ZIP city names:</strong> USPS <a href="https://postalpro.usps.com/ZIP_Locale_Detail">ZIP Code Locale Detail</a>
+        (post office city for each ZIP). You can type a city name in the From / To boxes.</li>
       <li><strong>City labels:</strong> <a href="https://www.naturalearthdata.com/">Natural Earth</a> populated places
         (public domain). Major cities show on the full map; more appear as you zoom in.</li>
       <li><strong>ZIP shapes:</strong> U.S. Census Bureau 2020 ZIP Code Tabulation Areas. They approximate ZIP codes;

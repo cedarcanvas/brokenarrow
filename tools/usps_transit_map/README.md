@@ -13,6 +13,13 @@ it, then hover other ZIPs to read exact days.
   `.github/workflows/usps-transit-map.yml`. No server needed.
 - **From / To boxes:** type two ZIP codes to get a trip card with the delivery
   days, the arrival weekday (when "Mailed on" is set) and the on-time record.
+- **ZIP city names:** `build/fetch_zipnames.py` reads USPS's ZIP Code Locale
+  Detail spreadsheet in the build and writes `web/data/zipnames.json`. The
+  From / To boxes also accept city names. Without that file, ZIPs show the
+  nearest labelled city ("near Denver").
+- **Side panel:** on-time meters at the top, then the hover/trip readout
+  (it replaces the floating tooltip), then the legend with a distribution bar
+  per class. Hover a legend row to spotlight those ZIPs.
 - **City labels:** major cities on the full map, regional cities as you zoom
   in. They come from `web/cities.json`, made by `build/make_cities.py` from
   Natural Earth (public domain).

@@ -10,7 +10,7 @@
   --border: rgba(11, 11, 11, 0.10);
   --accent: #002868;
   --accent-ink: #ffffff;
-  --map-bg: #fcfcfb;
+  --map-bg: #e9eef2;
   --land: #e9e9e7;
   --none: #bdbdbd;
   --line-zip3: rgba(80, 30, 10, 0.22);
@@ -21,6 +21,8 @@
   --d1: #fef0d9; --d2: #fdd49e; --d3: #fdbb84; --d4: #fc8d59;
   --d5: #ef6548; --d6: #d7301f; --d7: #990000;
   --dest: #2a78d6;
+  /* On-time meters: one blue ramp (validated --ordinal), kept apart from the map's OrRd */
+  --m0: #184f95; --m1: #3987e5; --m3: #86b6ef; --mtrack: #e6e5df; --mnat: #0b0b0b;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -42,6 +44,7 @@
     --line-zcta: rgba(23, 27, 32, 0.45);
     --line-state: rgba(255, 255, 255, 0.6);
     --halo: #0b0b0b;
+    --m0: #9ec5f4; --m1: #3987e5; --m3: #1c5cab; --mtrack: #2a2e34; --mnat: #ffffff;
   }
 }
 :root[data-theme="dark"] {
@@ -51,6 +54,7 @@
   --accent: #6da7ec; --accent-ink: #0b0b0b; --map-bg: #171b20; --land: #2f343b; --none: #6b6e73;
   --line-zip3: rgba(23, 27, 32, 0.8); --line-zcta: rgba(23, 27, 32, 0.45);
   --line-state: rgba(255, 255, 255, 0.6); --halo: #0b0b0b;
+  --m0: #9ec5f4; --m1: #3987e5; --m3: #1c5cab; --mtrack: #2a2e34; --mnat: #ffffff;
 }
 
 * { box-sizing: border-box; }
@@ -185,7 +189,7 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 /* Trip: From / To ZIP boxes */
 .trip { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
 .trip label { padding: 0 2px 0 10px; color: var(--ink-2); font-size: 14px; }
-.trip input { border: 0; background: none; padding: 6px 6px; width: 5.2em; outline: none; font-variant-numeric: tabular-nums; }
+.trip input { border: 0; background: none; padding: 6px 6px; width: 9em; outline: none; font-variant-numeric: tabular-nums; }
 .trip input + label { border-left: 1px solid var(--hair); }
 .trip button { border: 0; border-left: 1px solid var(--border); background: none; padding: 6px 12px; cursor: pointer; color: var(--ink-2); }
 .trip button:hover { color: var(--ink); background: var(--hair); }
@@ -197,3 +201,45 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .tripcard .big .sw { width: 16px; height: 16px; }
 .tripcard .clear { position: absolute; right: 0; top: 0; border: 1px solid var(--border); background: none; border-radius: 7px; padding: 2px 9px; font-size: 12px; cursor: pointer; color: var(--ink-2); }
 .tripcard .perf-tip { font-size: 13px; }
+
+/* Side panel, top to bottom: on-time meters, hover/trip readout, origin, legend */
+.side > div + div, .side > .readout { margin-top: 0; }
+.perf { border-top: 0; margin-top: 0; padding-top: 0; border-bottom: 1px solid var(--hair); padding-bottom: 12px; margin-bottom: 12px; }
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ph h3 { font-size: 14px; color: var(--ink); margin: 0; }
+.msub { font-size: 12px; color: var(--ink-2); margin: 8px 0 2px; font-weight: 600; }
+.mrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: baseline; margin: 4px 0 8px; }
+.mlab { font-size: 13px; color: var(--ink-2); }
+.mrow.em .mlab { color: var(--ink); font-weight: 600; }
+.mval { font-size: 13px; text-align: right; white-space: nowrap; }
+.mval b { font-size: 15px; color: var(--ink); }
+.mval .muted { font-variant-numeric: tabular-nums; }
+.meter { grid-column: 1 / -1; position: relative; display: flex; height: 8px; border-radius: 4px; background: var(--mtrack); overflow: visible; }
+.meter span { height: 100%; }
+.meter span + span { box-shadow: inset 2px 0 0 var(--surface); } /* 2px surface gap between segments */
+.meter .m0 { background: var(--m0); border-radius: 4px 0 0 4px; }
+.meter .m1 { background: var(--m1); }
+.meter .m3 { background: var(--m3); }
+.meter .nat { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--mnat); border-radius: 1px; }
+.mkey { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.mkey i { display: inline-block; width: 10px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.mkey .k0 { background: var(--m0); } .mkey .k1 { background: var(--m1); } .mkey .k3 { background: var(--m3); }
+.mkey .kn { width: 2px; height: 12px; background: var(--mnat); vertical-align: -2px; }
+
+.readout { border-bottom: 1px solid var(--hair); padding-bottom: 12px; margin-bottom: 12px; position: relative; min-height: 64px; }
+.readout p { margin: 4px 0 0; font-size: 13px; }
+.readout .cap { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.readout .route { font-size: 18px; font-weight: 650; color: var(--title); }
+.readout .route .to { color: var(--dest); }
+.readout .route .city { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.readout .cities { font-size: 13px; color: var(--ink-2); }
+.readout .hero { display: flex; align-items: center; gap: 8px; font-size: 26px; font-weight: 650; margin: 6px 0 0; color: var(--ink); line-height: 1.15; }
+.readout .hero .sw { width: 18px; height: 18px; border-radius: 4px; }
+.readout .clear { position: absolute; right: 0; top: 0; border: 1px solid var(--border); background: none; border-radius: 7px; padding: 2px 9px; font-size: 12px; cursor: pointer; color: var(--ink-2); }
+
+/* Legend: swatch, label, distribution bar, count */
+.legend li { grid-template-columns: 18px minmax(70px, auto) 1fr auto; cursor: default; }
+.legend li .bar { height: 8px; }
+.legend li .bar i { display: block; height: 100%; min-width: 0; background: var(--ink-2); opacity: .35; border-radius: 0 4px 4px 0; }
+.legend li.hit .bar i, .legend li.focus .bar i { opacity: .7; }
+.legend li.focus { background: var(--hair); }
