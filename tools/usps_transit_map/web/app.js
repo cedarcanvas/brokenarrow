@@ -18,6 +18,19 @@
   const NONE = 7;
   const bucketOf = (d) => (d === 0 ? NONE : d <= 5 ? d - 1 : d <= 9 ? 5 : 6);
   const daysText = (d) => (d === 0 ? "No USPS standard" : d === 1 ? "1 day" : `${d} days`);
+  // Mailing day. USPS counts delivery days after the day mail is accepted and
+  // skips Sundays and federal holidays, so the weekday you mail on changes how
+  // many calendar days the trip takes. Index 0 = Monday ... 6 = Sunday.
+  const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  function arrival(wd, d) {
+    // Mail dropped on Sunday is accepted Monday.
+    let cur = wd === 6 ? 0 : wd, cal = wd === 6 ? 1 : 0, n = 0;
+    while (n < d) { cur = (cur + 1) % 7; cal++; if (cur !== 6) n++; }
+    return { cal, wd: cur };
+  }
+  // USPS days -> calendar days, one lookup table per mailing day.
+  const CAL = WEEKDAYS.map((_, wd) => Uint8Array.from({ length: 256 }, (_, d) => (d ? Math.min(255, arrival(wd, d).cal) : 0)));
   const SHORT = { fcm: "Letters", ga: "Ground Adv.", pm: "Priority", mkt: "Marketing", per: "Periodicals" };
 
   // ---------- map layout ----------
@@ -44,6 +57,7 @@
     meshZip3: null, meshZcta: null, meshState: null,
     grid: null,
     cls: "fcm", days: {},
+    mailDay: null,    // null = plain USPS days; 0-6 = mailed Mon-Sun (calendar days)
     origin: null,     // prefix index of the origin
     originZip: null,  // feature
     pinned: false,
@@ -74,6 +88,7 @@
     const avail = meta.classes.map(c => c.key);
     S.cls = avail.includes(hash.cls) ? hash.cls : avail[0];
     buildClassButtons();
+    if (hash.day != null) { S.mailDay = hash.day; $("mailday").value = String(hash.day); }
     buildGeometry(topo, states);
     readColors();
     resize();
@@ -102,6 +117,7 @@
     S.cls = k;
     for (const b of $("classes").children) b.setAttribute("aria-checked", b.dataset.k === k);
     $("className").textContent = S.meta.classes.find(c => c.key === k).label;
+    unitsText();
     if (!S.days[k]) {
       const buf = await fetch(`data/days_${k}.bin`).then(r => r.arrayBuffer());
       S.days[k] = new Uint8Array(buf);
@@ -198,6 +214,15 @@
     return null;
   }
 
+  // The days row for the current origin, converted to calendar days when a mailing day is set.
+  function currentRow() {
+    if (S.origin == null || !S.days[S.cls]) return null;
+    const row = S.days[S.cls].subarray(S.origin * S.N, (S.origin + 1) * S.N);
+    if (S.mailDay == null) return row;
+    const t = CAL[S.mailDay];
+    return row.map((d) => t[d]);
+  }
+
   // ---------- drawing ----------
   function readColors() {
     const cs = getComputedStyle(document.documentElement);
@@ -227,6 +252,7 @@
 
   let raf = 0;
   function draw() {
+    S.rowCache = null;
     if (raf) return;
     raf = requestAnimationFrame(() => { raf = 0; render(); });
   }
@@ -249,7 +275,7 @@
     });
 
     // Fills: one per ZIP prefix
-    const row = S.origin == null ? null : S.days[S.cls]?.subarray(S.origin * S.N, (S.origin + 1) * S.N);
+    const row = S.rowCache || (S.rowCache = currentRow());
     for (let i = 0; i < S.N; i++) {
       if (!S.zip3Count[i]) continue;
       ctx.fillStyle = row ? C.bucket[bucketOf(row[i])] : C.land;
@@ -304,11 +330,25 @@
   }
   const toScreen = (vx, vy) => [vx * scale() + S.t.x + S.t.k * S.fit.x, vy * scale() + S.t.y + S.t.k * S.fit.y];
 
+  function unitsText() {
+    $("units").textContent = S.mailDay == null
+      ? "USPS delivery days"
+      : `calendar days if mailed ${WEEKDAY_NAMES[S.mailDay]}`;
+  }
+
+  function setMailDay(v) {
+    S.mailDay = v === "" || v == null ? null : +v;
+    $("mailday").value = S.mailDay == null ? "" : String(S.mailDay);
+    unitsText(); writeHash(); draw(); legend(); showTip(); status();
+  }
+  $("mailday").addEventListener("change", (e) => setMailDay(e.target.value));
+
   // ---------- side panel ----------
   function legend() {
+    S.rowCache = null;
     const ul = $("legend");
     const counts = new Array(BUCKETS.length).fill(0);
-    const row = S.origin == null ? null : S.days[S.cls].subarray(S.origin * S.N, (S.origin + 1) * S.N);
+    const row = S.rowCache || (S.rowCache = currentRow());
     if (row) for (let i = 0; i < S.N; i++) counts[bucketOf(row[i])] += S.zip3Count[i];
     const hoverB = row && S.hover ? bucketOf(row[S.hover.i]) : -1;
     ul.innerHTML = "";
@@ -338,9 +378,19 @@
     let html;
     if (S.pinned && S.originZip) {
       const d = S.days[S.cls][S.origin * S.N + f.i];
+      const label = S.meta.classes.find(c => c.key === S.cls).label;
+      let line, note = label;
+      if (S.mailDay != null && d) {
+        const a = arrival(S.mailDay, d);
+        line = `<span class="sw" style="background:${S.colors.bucket[bucketOf(a.cal)]}"></span>
+          Mailed ${WEEKDAYS[S.mailDay]} → arrives ${WEEKDAYS[a.wd]} · ${a.cal} calendar day${a.cal === 1 ? "" : "s"}`;
+        note = `${label} · ${daysText(d)} by USPS count`;
+      } else {
+        line = `<span class="sw" style="background:${S.colors.bucket[bucketOf(d)]}"></span>${daysText(d)}`;
+      }
       html = `<b>${S.originZip.z}</b> → <b>${f.z}</b> <span class="muted">${z3.s}</span>
-        <div class="days"><span class="sw" style="background:${S.colors.bucket[bucketOf(d)]}"></span>${daysText(d)}</div>
-        <span class="muted">${S.meta.classes.find(c => c.key === S.cls).label}</span>`;
+        <div class="days">${line}</div>
+        <span class="muted">${note}</span>`;
     } else {
       html = `From <b>${f.z}</b> <span class="muted">${z3.s} · prefix ${z3.z}xx</span>
         <div class="muted">Click to pin this origin</div>`;
@@ -357,8 +407,9 @@
   function status() {
     const c = S.meta.classes.find(c => c.key === S.cls);
     const o = S.originZip;
+    const when = S.mailDay == null ? "" : `, mailed on a ${WEEKDAY_NAMES[S.mailDay]}`;
     $("status").textContent = o
-      ? `${c.label} from ${o.z} (${S.zip3[o.i].s}). ${S.pinned ? "Pinned. Hover other ZIPs to see days." : "Click to pin."}`
+      ? `${c.label}${when} from ${o.z} (${S.zip3[o.i].s}). ${S.pinned ? "Pinned. Hover other ZIPs to see days." : "Click to pin."}`
       : `${S.meta.n_zcta.toLocaleString()} ZIP codes in ${S.N} prefixes. Hover over the map to choose an origin.`;
   }
 
@@ -456,11 +507,15 @@
 
   // URL hash: #fcm/80202
   function readHash() {
-    const [cls, zip] = location.hash.replace(/^#/, "").split("/");
-    return { cls, zip };
+    // #fcm/80202/fri  (ZIP and mailing day are optional; #fcm//fri works too)
+    const [cls, zip, day] = location.hash.replace(/^#/, "").split("/");
+    const wd = WEEKDAYS.findIndex(w => w.toLowerCase() === (day || "").toLowerCase());
+    return { cls, zip, day: wd >= 0 ? wd : null };
   }
   function writeHash() {
-    const h = `#${S.cls}${S.pinned && S.originZip ? "/" + S.originZip.z : ""}`;
+    const zip = S.pinned && S.originZip ? S.originZip.z : "";
+    const day = S.mailDay == null ? "" : WEEKDAYS[S.mailDay].toLowerCase();
+    const h = `#${S.cls}${zip || day ? "/" + zip : ""}${day ? "/" + day : ""}`;
     if (location.hash !== h) history.replaceState(null, "", h);
   }
 
