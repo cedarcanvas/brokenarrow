@@ -78,6 +78,10 @@ jobs:
           fi
           ls -la raw/usps
 
+      - name: Probe USPS on-time performance sources (temporary)
+        continue-on-error: true
+        run: python build/probe_performance.py
+
       - name: Build map data
         run: |
           if [ "${{ inputs.demo }}" = "true" ] || ! find raw/usps -type f ! -iname 'readme.md' ! -iname 'columns.json' ! -iname 'vintage.txt' ! -name '.*' | grep -q .; then
