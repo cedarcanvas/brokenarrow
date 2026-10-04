@@ -96,6 +96,20 @@ def main():
             break
     print(f"\nNewest quarter found: {found_q}")
 
+    print("\n=== Full tables, FY2026 Q3 ===")
+    for name, full in [("single-piece-first-class-mail-quarterly-performance", True),
+                       ("single-piece-first-class-mail-service-variance", True),
+                       ("marketing-mail-quarterly-performance", False),
+                       ("periodicals-quarterly-performance", False),
+                       ("package-services-quarterly-performance", False)]:
+        r = try_url(f"{BASE}fy2026-q3-{name}.html")
+        if not r:
+            continue
+        tables = pd.read_html(io.StringIO(r[0].decode("utf-8", errors="replace")))
+        for i, t in enumerate(tables):
+            print(f"--- {name} table {i} ({t.shape[0]}x{t.shape[1]})")
+            print((t if full else t.head(10)).to_csv(index=False))
+
     print("\n=== Service performance landing page links ===")
     r = try_url(BASE)
     if r:
@@ -112,7 +126,7 @@ def main():
         print("   scripts:", re.findall(r'<script[^>]+src="([^"]+)"', html)[:20])
         for m in sorted(set(re.findall(r'["\'](/?[A-Za-z0-9_\-/]*(?:api|json|data|download)[A-Za-z0-9_\-/.?=]*)["\']', html, re.I)))[:40]:
             print("   candidate:", m)
-        for src in re.findall(r'<script[^>]+src="([^"]+)"', html)[:8]:
+        for src in []:
             url = src if src.startswith("http") else "https://spm.usps.com/" + src.lstrip("/")
             s = try_url(url)
             if s:
