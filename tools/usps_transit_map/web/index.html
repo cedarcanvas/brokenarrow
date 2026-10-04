@@ -16,6 +16,19 @@
   </div>
   <div class="controls">
     <div class="classes" role="radiogroup" aria-label="Mail class" id="classes"></div>
+    <label class="mailday">
+      <span>Mailed on</span>
+      <select id="mailday" aria-label="Day the mail is sent">
+        <option value="">Any day (USPS count)</option>
+        <option value="0">Monday</option>
+        <option value="1">Tuesday</option>
+        <option value="2">Wednesday</option>
+        <option value="3">Thursday</option>
+        <option value="4">Friday</option>
+        <option value="5">Saturday</option>
+        <option value="6">Sunday</option>
+      </select>
+    </label>
     <form class="search" id="search" autocomplete="off">
       <label for="zip" class="vh">Find a ZIP code</label>
       <input id="zip" name="zip" inputmode="numeric" pattern="[0-9]{3,5}" maxlength="5" placeholder="ZIP code">
@@ -48,7 +61,7 @@
       <div class="origin-meta" id="originMeta">Hover over the map, or click a ZIP to pin it.</div>
       <button id="unpin" class="unpin" hidden>Unpin</button>
     </div>
-    <h2 class="legend-title"><span id="className">First-Class Mail</span> · days in transit</h2>
+    <h2 class="legend-title"><span id="className">First-Class Mail</span> · <span id="units">USPS delivery days</span></h2>
     <ul class="legend" id="legend" aria-live="polite"></ul>
     <p class="legend-note">Counts are ZIP codes reached in each number of days.</p>
   </aside>
@@ -66,6 +79,10 @@
         that shares a prefix gets the same color. Since 2025, USPS adds one day for some ZIPs more than
         50 miles from their regional processing plant, so a few ZIPs may be one day slower than shown.
         Check a specific pair at <a href="https://www.usps.com/service-standards/">usps.com/service-standards</a>.</li>
+      <li><strong>Mailing day:</strong> USPS counts delivery days starting the day after your mail is
+        accepted and skips Sundays and federal holidays. Picking a day under “Mailed on” turns that count into
+        calendar days: a 3-day letter mailed Friday arrives Tuesday (4 calendar days). Mail dropped in a box after
+        the last pickup, or on Sunday, is accepted the next business day. Holidays add a day and are not shown.</li>
       <li><strong>ZIP shapes:</strong> U.S. Census Bureau 2020 ZIP Code Tabulation Areas. They approximate ZIP codes;
         PO-box-only ZIPs have no shape.</li>
       <li><strong>Map:</strong> Equal Earth projection, which keeps areas true. Alaska, Hawaii and the territories
