@@ -96,6 +96,10 @@ jobs:
         continue-on-error: true
         run: python build/fetch_performance.py
 
+      - name: Add ZIP code city names (optional)
+        continue-on-error: true
+        run: python build/fetch_zipnames.py
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: tools/usps_transit_map/web

@@ -101,6 +101,11 @@
     resize();
     await setClass(S.cls);
     $("loading").remove();
+    buildCityIndex();
+    fetch("data/zipnames.json").then(r => (r.ok ? r.json() : null)).then((n) => {
+      if (!n) return;
+      S.names = n; buildCityIndex(); legend();
+    }).catch(() => {});
     if (hash.zip && S.byZip.has(hash.zip)) pinZip(S.byZip.get(hash.zip));
     if (hash.to && S.originZip && S.byZip.has(hash.to)) setDest(S.byZip.get(hash.to));
     status();
@@ -273,6 +278,66 @@
     ctx.textBaseline = "alphabetic";
   }
 
+  // ---------- ZIP -> city names ----------
+  // data/zipnames.json (USPS ZIP Locale Detail) gives each ZIP its post office city.
+  // If it's missing, fall back to the nearest labelled city: "near Denver".
+  function cityOf(f) {
+    if (!f) return "";
+    const N = S.names;
+    if (N && N.z[f.z] != null) { const [c, st] = N.c[N.z[f.z]]; return st ? `${c}, ${st}` : c; }
+    if (!S.cities || !S.cities.length) return S.zip3[f.i].s;
+    const cx = (f.bbox[0][0] + f.bbox[1][0]) / 2, cy = (f.bbox[0][1] + f.bbox[1][1]) / 2;
+    let best = null, bd = Infinity;
+    for (const c of S.cities) {
+      if (c.p !== f.p || c.tier > 2) continue;
+      const dd = (c.x - cx) ** 2 + (c.y - cy) ** 2;
+      if (dd < bd) { bd = dd; best = c; }
+    }
+    return best ? `near ${best.name}` : S.zip3[f.i].s;
+  }
+
+  // Search list for the From / To boxes: "City, ST" -> ZIPs (from USPS names when
+  // loaded), plus the labelled map cities (their ZIP is the one under the dot).
+  function buildCityIndex() {
+    const idx = new Map();
+    const add = (label, z) => {
+      const k = label.toLowerCase();
+      if (!idx.has(k)) idx.set(k, { label, zips: [] });
+      if (z && !idx.get(k).zips.includes(z)) idx.get(k).zips.push(z);
+    };
+    if (S.names) {
+      for (const [z, i] of Object.entries(S.names.z)) {
+        if (!S.byZip.has(z)) continue;
+        const [c, st] = S.names.c[i];
+        add(st ? `${c}, ${st}` : c, z);
+      }
+    }
+    for (const c of S.cities || []) {
+      const f = featureAt(c.x, c.y);
+      if (f) add(c.name, f.z);
+    }
+    S.cityIndex = [...idx.values()].map(v => ({ ...v, zips: v.zips.sort() }));
+  }
+
+  function suggest(input) {
+    const q = input.value.trim().toLowerCase();
+    const dl = $("zipcities");
+    dl.innerHTML = "";
+    if (q.length < 2 || /^\d+$/.test(q) || !S.cityIndex) return;
+    const starts = [], has = [];
+    for (const e of S.cityIndex) {
+      const l = e.label.toLowerCase();
+      if (l.startsWith(q)) starts.push(e); else if (l.includes(q)) has.push(e);
+      if (starts.length >= 10) break;
+    }
+    for (const e of [...starts, ...has].slice(0, 10)) {
+      const o = document.createElement("option");
+      o.value = e.label;
+      o.label = e.zips.length > 1 ? `${e.zips[0]} + ${e.zips.length - 1} more ZIPs` : e.zips[0];
+      dl.appendChild(o);
+    }
+  }
+
   function featureAt(vx, vy) {
     const { G, gw, gh, cells } = S.grid;
     const gx = Math.floor(vx / gw), gy = Math.floor(vy / gh);
@@ -351,7 +416,9 @@
     for (let i = 0; i < S.N; i++) {
       if (!S.zip3Count[i]) continue;
       ctx.fillStyle = row ? C.bucket[bkt(row[i])] : C.land;
+      ctx.globalAlpha = row && S.focus != null && bkt(row[i]) !== S.focus ? 0.15 : 1;
       ctx.fill(S.zip3Paths[i], "evenodd");
+      ctx.globalAlpha = 1;
     }
 
     // Borders
@@ -456,10 +523,26 @@
   const pct = (v) => (v == null ? "—" : `${Math.round(v)}%`);
   const STD_NAME = { 1: "overnight", 2: "2-day", 3: "3–5-day", all: "" };
 
-  function perfLine(p) {
-    const w1 = p.w[p.k] && p.w[p.k][0];
-    return `<b>${pct(p.on[p.k])}</b> on time${w1 != null ? ` · ${pct(w1)} within 1 extra day` : ""}`;
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // One cumulative meter: on time, then within +1 day, then +3 days, on a 0-100% track,
+  // with a tick at the national on-time figure. Numbers are always printed beside it.
+  function meterRow(label, p, emphasize) {
+    const on = p.on[p.k], w = p.w[p.k] || [], nat = p.nation[p.k];
+    const w1 = w[0] ?? on, w3 = w[2] ?? w1;
+    const seg = (v) => `${Math.max(0, v).toFixed(1)}%`;
+    return `<div class="mrow${emphasize ? " em" : ""}">
+      <div class="mlab">${esc(label)}</div>
+      <div class="mval"><b>${pct(on)}</b><span class="muted">${w[0] != null ? ` ${pct(w1)} · ${pct(w3)}` : ""}</span></div>
+      <div class="meter" role="img" aria-label="${esc(label)}: ${pct(on)} on time${w[0] != null ? `, ${pct(w1)} within 1 extra day, ${pct(w3)} within 3` : ""}${nat != null ? `; national ${pct(nat)}` : ""}">
+        <span class="m0" style="width:${seg(on)}"></span><span class="m1" style="width:${seg(w1 - on)}"></span><span class="m3" style="width:${seg(w3 - w1)}"></span>
+        ${nat != null ? `<i class="nat" style="left:${seg(nat)}" title="National: ${pct(nat)}"></i>` : ""}
+      </div>
+    </div>`;
   }
+
+  // The current destination being compared: the hovered ZIP while pinned, else the typed To ZIP.
+  const target = () => (S.pinned && S.originZip ? (S.hover && S.hover !== S.originZip ? S.hover : S.dest) : null);
 
   function perfPanel() {
     const box = $("perf");
@@ -468,33 +551,32 @@
     box.hidden = false;
     const c = P.classes[S.cls];
     const cls = S.meta.classes.find(x => x.key === S.cls).label;
-    if (!c) {
-      box.innerHTML = `<h3>How often it's on time</h3>
-        <p class="muted">USPS doesn't publish on-time results by region for ${cls}.</p>`;
-      return;
-    }
-    if (S.origin == null) {
-      box.innerHTML = `<h3>How often it's on time</h3>
-        <p class="muted">Hover a ZIP to see USPS's on-time record for its ${c.level}.</p>`;
-      return;
-    }
-    const z3 = S.zip3[S.origin].z;
+    const head = `<div class="ph"><h3>How often it's on time</h3></div>`;
+    if (!c) { box.innerHTML = head + `<p class="muted">USPS doesn't publish on-time results by region for ${cls}.</p>`; return; }
+    if (S.origin == null) { box.innerHTML = head + `<p class="muted">Hover a ZIP to see USPS's on-time record for its ${c.level}.</p>`; return; }
+    const z3 = S.zip3[S.origin].z, t = target();
+    const d = t ? S.days[S.cls][S.origin * S.N + t.i] : 0;
+    const pairK = c.by_std && d ? (d <= 1 ? "1" : d === 2 ? "2" : "3") : "all";
     const keys = c.by_std ? ["2", "3"] : ["all"];
-    const rows = keys.map((k) => {
-      const p = perfFor(z3, k === "2" ? 2 : 3);
-      if (!p) return "";
-      const w = p.w[p.k] || [];
-      return `<tr><th>${c.by_std ? STD_NAME[k] + " mail" : "All"}</th><td>${pct(p.on[p.k])}</td>
-        <td>${pct(w[0])}</td><td>${pct(w[2])}</td></tr>`;
-    }).join("");
-    const p0 = perfFor(z3, 3);
-    box.innerHTML = p0 ? `<h3>How often it's on time</h3>
-      <p class="muted">${c.label}, <span class="nw">${p0.name}</span>, ${P.quarter}</p>
-      <table class="perf-t"><thead><tr><th></th><th>On time</th><th>+1 day</th><th>+3 days</th></tr></thead>
-      <tbody>${rows}</tbody></table>
-      <p class="muted small">Nationally: ${keys.map(k => `${c.by_std ? STD_NAME[k] + " " : ""}${pct(c.nation[k])}`).join(", ")} on time.
-      <a href="${c.source}">USPS report</a></p>`
-      : `<h3>How often it's on time</h3><p class="muted">No USPS results for this ${c.level}.</p>`;
+    const from = perfFor(z3, 3);
+    let rows = "";
+    if (from) {
+      rows += `<div class="msub">From ${esc(from.name)}</div>`;
+      for (const k of keys) {
+        const p = perfFor(z3, k === "2" ? 2 : 3);
+        if (p) rows += meterRow(c.by_std ? `${STD_NAME[k]} mail` : "All mail", p, t && k === pairK);
+      }
+    }
+    if (t && d) {
+      const to = perfFor(S.zip3[t.i].z, d);
+      if (to && (!from || to.name !== from.name)) {
+        rows += `<div class="msub">To ${esc(to.name)}</div>` + meterRow(c.by_std ? `${STD_NAME[to.k]} mail` : "All mail", to, true);
+      }
+    }
+    if (!rows) { box.innerHTML = head + `<p class="muted">No USPS results for this ${c.level}.</p>`; return; }
+    box.innerHTML = head + `<p class="muted small">${esc(c.label)} · USPS results, ${P.quarter}</p>${rows}
+      <div class="mkey"><span><i class="k0"></i>On time</span><span><i class="k1"></i>+1 day</span><span><i class="k3"></i>+3 days</span><span><i class="kn"></i>National</span></div>
+      <p class="muted small"><a href="${c.source}">USPS report</a></p>`;
   }
 
   // ---------- side panel ----------
@@ -504,7 +586,9 @@
     const counts = new Array(BUCKETS.length).fill(0);
     const row = S.rowCache || (S.rowCache = currentRow());
     if (row) for (let i = 0; i < S.N; i++) counts[bkt(row[i])] += S.zip3Count[i];
-    const hoverB = row && S.hover ? bkt(row[S.hover.i]) : -1;
+    const max = Math.max(1, ...counts);
+    const t = target();
+    const hoverB = row && (t || S.hover) ? bkt(row[(t || S.hover).i]) : -1;
     ul.innerHTML = "";
     BUCKETS.forEach((b, j) => {
       // USPS doesn't count Sundays, so nothing is scheduled to arrive on one.
@@ -512,8 +596,14 @@
       const li = document.createElement("li");
       if (row && !counts[j]) li.className = "zero";
       if (j === hoverB) li.classList.add("hit");
+      if (j === S.focus) li.classList.add("focus");
       li.innerHTML = `<span class="sw" style="background:${S.colors.bucket[j]}"></span>
-        <span>${bucketLabel(j)}</span><span class="n">${row ? counts[j].toLocaleString() : ""}</span>`;
+        <span class="lab">${bucketLabel(j)}</span>
+        <span class="bar">${row ? `<i style="width:${(100 * counts[j] / max).toFixed(1)}%"></i>` : ""}</span>
+        <span class="n">${row ? counts[j].toLocaleString() : ""}</span>`;
+      // Hover a legend row to spotlight those ZIPs on the map.
+      li.onmouseenter = () => { S.focus = j; draw(); };
+      li.onmouseleave = () => { S.focus = null; draw(); };
       ul.appendChild(li);
     });
 
@@ -521,56 +611,54 @@
     const oz = S.originZip;
     $("originZip").textContent = oz ? oz.z : "—";
     $("originMeta").textContent = o
-      ? `${o.s || "—"} · prefix ${o.z}xx${S.pinned ? " · pinned" : ""}`
+      ? `${cityOf(oz)} · ${o.s || "—"} · prefix ${o.z}xx${S.pinned ? " · pinned" : ""}`
       : "Hover over the map, or click a ZIP to pin it.";
     $("unpin").hidden = !S.pinned;
     perfPanel();
-    tripCard();
+    readout();
   }
 
-  function showTip(sx, sy) {
-    if (sx != null) S.tipXY = [sx, sy];
-    const f = S.hover;
-    if (!f || !S.tipXY) { tip.hidden = true; return; }
-    const z3 = S.zip3[f.i];
-    let html;
-    if (S.pinned && S.originZip) {
-      const d = S.days[S.cls][S.origin * S.N + f.i];
-      const label = S.meta.classes.find(c => c.key === S.cls).label;
-      let line, note = label;
-      if (S.mailDay != null && d) {
-        const a = arrival(S.mailDay, d);
-        const later = a.cal >= 7 ? ` (${a.cal >= 14 ? "in " + Math.floor(a.cal / 7) + " weeks" : "next week"})` : "";
-        line = `<span class="sw" style="background:${S.colors.bucket[bkt(a.cal)]}"></span>
-          Mailed ${WEEKDAY_NAMES[S.mailDay]} → arrives ${WEEKDAY_NAMES[a.wd]}${later}`;
-        note = `${label} · ${daysText(d)} by USPS count, ${a.cal} days after mailing`;
-      } else {
-        line = `<span class="sw" style="background:${S.colors.bucket[bucketOf(d)]}"></span>${daysText(d)}`;
-      }
-      // On-time record of the sending and receiving districts, if USPS publishes one.
-      let perfHtml = "";
-      if (S.perf && d) {
-        const from = perfFor(S.zip3[S.origin].z, d), to = perfFor(z3.z, d);
-        if (from) perfHtml += `<div class="perf-tip">From ${from.name}: ${perfLine(from)}</div>`;
-        if (to && (!from || to.name !== from.name)) perfHtml += `<div class="perf-tip">To ${to.name}: ${perfLine(to)}</div>`;
-        if (!S.perf.classes[S.cls]) perfHtml = `<div class="perf-tip muted">No public on-time data for this service</div>`;
-      }
-      html = `<b>${S.originZip.z}</b> → <b>${f.z}</b> <span class="muted">${z3.s}</span>
-        <div class="days">${line}</div>
-        ${perfHtml}
-        <span class="muted">${note}</span>`;
-    } else {
-      html = `From <b>${f.z}</b> <span class="muted">${z3.s} · prefix ${z3.z}xx</span>
-        <div class="muted">Click to pin this origin</div>`;
+  // Hover / trip readout in the right margin (replaces a floating tooltip).
+  function readout() {
+    const box = $("readout");
+    const a = S.originZip, t = target();
+    const label = S.meta.classes.find(c => c.key === S.cls).label;
+    if (!a) {
+      box.innerHTML = `<p class="muted">Hover over the map to pick a starting ZIP, or type ZIPs or cities above.</p>`;
+      return;
     }
-    tip.innerHTML = html;
-    tip.hidden = false;
-    const [x, y] = S.tipXY;
-    const tw = tip.offsetWidth, th = tip.offsetHeight;
-    const clamp = (v, max) => Math.max(4, Math.min(v, max - 4));
-    tip.style.left = `${clamp(x + 14 + tw > S.w ? x - tw - 14 : x + 14, S.w - tw)}px`;
-    tip.style.top = `${clamp(y + 14 + th > S.h ? y - th - 14 : y + 14, S.h - th)}px`;
+    if (!S.pinned) {
+      box.innerHTML = `<span class="muted cap">From</span>
+        <div class="route">${a.z} <span class="city">${esc(cityOf(a))}</span></div>
+        <p class="muted">Click to pin this ZIP, then hover anywhere to compare.</p>`;
+      return;
+    }
+    if (!t) {
+      box.innerHTML = `<span class="muted cap">From</span>
+        <div class="route">${a.z} <span class="city">${esc(cityOf(a))}</span></div>
+        <p class="muted">Hover a ZIP, or type a To ZIP or city above.</p>`;
+      return;
+    }
+    const d = S.days[S.cls] ? S.days[S.cls][a.i * S.N + t.i] : 0;
+    let value, cap, sw;
+    if (!d) { value = "No standard"; cap = "USPS lists no target for this pair"; sw = S.colors.bucket[NONE]; }
+    else if (S.mailDay != null) {
+      const r = arrival(S.mailDay, d);
+      value = WEEKDAY_NAMES[r.wd] + (r.cal >= 7 ? (r.cal >= 14 ? ` (in ${Math.floor(r.cal / 7)} wks)` : " next week") : "");
+      cap = `arrives, if mailed ${WEEKDAY_NAMES[S.mailDay]} · ${r.cal} days after mailing`;
+      sw = S.colors.bucket[bkt(r.cal)];
+    } else { value = daysText(d); cap = "USPS target (delivery days, no Sundays or holidays)"; sw = S.colors.bucket[bucketOf(d)]; }
+    const isTrip = t === S.dest;
+    box.innerHTML = `${isTrip ? `<button class="clear" id="clearTrip">Clear</button>` : ""}
+      <span class="muted cap">${isTrip ? "Trip" : "Hovered"} · ${esc(label)}</span>
+      <div class="route">${a.z} → <span class="to">${t.z}</span></div>
+      <div class="cities">${esc(cityOf(a))} → ${esc(cityOf(t))}</div>
+      <div class="hero"><span class="sw" style="background:${sw}"></span>${esc(value)}</div>
+      <div class="muted">${esc(cap)}${S.mailDay == null && d ? ` · pick “Mailed on” for the weekday` : ""}</div>`;
+    if (isTrip) $("clearTrip").onclick = () => setDest(null);
   }
+
+  function showTip() { /* hover details now live in the side panel */ }
 
   function status() {
     const c = S.meta.classes.find(c => c.key === S.cls);
@@ -668,7 +756,16 @@
   // shape (PO-box only), falls back to a ZIP in the same prefix: same days.
   function resolveZip(v) {
     v = (v || "").trim();
-    if (!/^\d{3,5}$/.test(v)) return { f: null, note: v ? `“${v}” isn't a ZIP code.` : "" };
+    const digits = v.match(/\b(\d{5}|\d{3})\b/);
+    if (!digits && v) {
+      const k = v.toLowerCase().replace(/\s+\d.*$/, "");
+      const e = S.cityIndex && (S.cityIndex.find(x => x.label.toLowerCase() === k) ||
+        S.cityIndex.find(x => x.label.toLowerCase().startsWith(k)));
+      if (e) return { f: S.byZip.get(e.zips[0]), note: e.zips.length > 1 ? `${e.label}: using ${e.zips[0]} (one of ${e.zips.length} ZIPs).` : "" };
+      return { f: null, note: `No ZIP or city found for “${v}”.` };
+    }
+    if (!digits) return { f: null, note: "" };
+    v = digits[1];
     let f = S.byZip.get(v.padStart(5, "0"));
     if (f) return { f, note: "" };
     f = S.feats.find(x => x.z.startsWith(v.slice(0, 3)));
@@ -682,6 +779,8 @@
     writeHash(); legend(); draw();
     if (zoom && f && S.originZip) zoomToPair(S.originZip, f);
   }
+
+  for (const id of ["fromZip", "toZip"]) $(id).addEventListener("input", (e) => suggest(e.target));
 
   $("trip").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -704,40 +803,6 @@
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const t = d3.zoomIdentity.translate(S.w / 2 - k * (cx * fk + S.fit.x), S.h / 2 - k * (cy * fk + S.fit.y)).scale(k);
     d3.select(canvas).transition().duration(600).call(zoom.transform, t);
-  }
-
-  // Side-panel card for a typed From -> To trip.
-  function tripCard() {
-    const box = $("tripcard");
-    const a = S.originZip, b = S.dest;
-    if (!S.pinned || !a || !b) { box.hidden = true; return; }
-    const d = S.days[S.cls] ? S.days[S.cls][a.i * S.N + b.i] : 0;
-    const label = S.meta.classes.find(c => c.key === S.cls).label;
-    let big;
-    if (!d) big = `<span class="sw" style="background:${S.colors.bucket[NONE]}"></span>No USPS standard`;
-    else if (S.mailDay != null) {
-      const r = arrival(S.mailDay, d);
-      big = `<span class="sw" style="background:${S.colors.bucket[bkt(r.cal)]}"></span>Arrives ${WEEKDAY_NAMES[r.wd]}`;
-    } else big = `<span class="sw" style="background:${S.colors.bucket[bucketOf(d)]}"></span>${daysText(d)}`;
-    let perf = "";
-    if (S.perf && d) {
-      const from = perfFor(S.zip3[a.i].z, d), to = perfFor(S.zip3[b.i].z, d);
-      if (!S.perf.classes[S.cls]) perf = `<div class="perf-tip muted">No public on-time data for this service</div>`;
-      else {
-        if (from) perf += `<div class="perf-tip">From ${from.name}: ${perfLine(from)}</div>`;
-        if (to && (!from || to.name !== from.name)) perf += `<div class="perf-tip">To ${to.name}: ${perfLine(to)}</div>`;
-      }
-    }
-    const when = S.mailDay != null && d ? `Mailed ${WEEKDAY_NAMES[S.mailDay]} · ${daysText(d)} by USPS count` : "Pick “Mailed on” to see the arrival day";
-    box.innerHTML = `<button class="clear" id="clearTrip">Clear</button>
-      <span class="muted">Trip</span>
-      <div class="route">${a.z} → <span class="to">${b.z}</span></div>
-      <div class="muted">${S.zip3[a.i].s} → ${S.zip3[b.i].s}</div>
-      <div class="big">${big}</div>
-      <div class="muted">${label} · ${when}</div>
-      ${perf}`;
-    box.hidden = false;
-    $("clearTrip").onclick = () => setDest(null);
   }
 
   // URL hash: #fcm/80202
