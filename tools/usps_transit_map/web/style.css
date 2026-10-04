@@ -15,14 +15,17 @@
   --none: #bdbdbd;
   --line-zip3: rgba(80, 30, 10, 0.22);
   --line-zcta: rgba(80, 30, 10, 0.12);
-  --line-state: rgba(11, 11, 11, 0.55);
+  --line-state: rgba(11, 11, 11, 0.8);
+  --line-state-halo: rgba(255, 255, 255, 0.55);
+  --empty: #dfe2e0;            /* land with no ZIP code */
+  --empty-line: rgba(11, 11, 11, 0.13);
   --halo: #ffffff;
-  /* Delivery-day classes (ColorBrewer OrRd, 7 classes), light = fast, dark red = slow */
-  --d1: #fef0d9; --d2: #fdd49e; --d3: #fdbb84; --d4: #fc8d59;
-  --d5: #ef6548; --d6: #d7301f; --d7: #990000;
-  --dest: #2a78d6;
-  --hub: #3a2d8f;   /* plant markers sit on the orange map in both themes */
-  /* On-time meters: one blue ramp (validated --ordinal), kept apart from the map's OrRd */
+  /* Delivery-day classes (ColorBrewer GnBu, 7 classes), light = fast, dark blue = slow */
+  --d1: #f0f9e8; --d2: #ccebc5; --d3: #a8ddb5; --d4: #7bccc4;
+  --d5: #4eb3d3; --d6: #2b8cbe; --d7: #08589e;
+  --dest: #c51b7d;  /* warm accents stand apart from the green-blue map */
+  --hub: #d95f0e;   /* plant markers, same in both themes */
+  /* On-time meters: one blue ramp (validated --ordinal), in its own panel */
   --m0: #184f95; --m1: #3987e5; --m3: #86b6ef; --mtrack: #e6e5df; --mnat: #0b0b0b;
 }
 @media (prefers-color-scheme: dark) {
@@ -43,7 +46,11 @@
     --none: #6b6e73;
     --line-zip3: rgba(23, 27, 32, 0.8);
     --line-zcta: rgba(23, 27, 32, 0.45);
-    --line-state: rgba(255, 255, 255, 0.6);
+    --line-state: rgba(255, 255, 255, 0.85);
+    --line-state-halo: rgba(11, 11, 11, 0.5);
+    --empty: #23272d;
+    --empty-line: rgba(255, 255, 255, 0.09);
+    --dest: #f06aa8;
     --halo: #0b0b0b;
     --m0: #9ec5f4; --m1: #3987e5; --m3: #1c5cab; --mtrack: #2a2e34; --mnat: #ffffff;
   }
@@ -54,7 +61,8 @@
   --title: #ffffff; --hair: #2c3036; --border: rgba(255, 255, 255, 0.10);
   --accent: #6da7ec; --accent-ink: #0b0b0b; --map-bg: #171b20; --land: #2f343b; --none: #6b6e73;
   --line-zip3: rgba(23, 27, 32, 0.8); --line-zcta: rgba(23, 27, 32, 0.45);
-  --line-state: rgba(255, 255, 255, 0.6); --halo: #0b0b0b;
+  --line-state: rgba(255, 255, 255, 0.85); --line-state-halo: rgba(11, 11, 11, 0.5);
+  --empty: #23272d; --empty-line: rgba(255, 255, 255, 0.09); --dest: #f06aa8; --halo: #0b0b0b;
   --m0: #9ec5f4; --m1: #3987e5; --m3: #1c5cab; --mtrack: #2a2e34; --mnat: #ffffff;
 }
 
@@ -252,3 +260,12 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .hubkey { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--hair); font-size: 13px; color: var(--ink-2); }
 .hubkey label { display: flex; align-items: center; gap: 6px; color: var(--ink); cursor: pointer; }
 .hubkinds { display: flex; gap: 14px; margin: 6px 0 0; }
+
+/* Legend: chance in each row; ZIP counts on hover */
+.legend li .ct { display: none; }
+.legend li:hover .pc { display: none; }
+.legend li:hover .ct { display: inline; }
+.nozip { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--ink-2); margin: 8px 0 0; }
+.sw-empty { flex: none; width: 18px; height: 14px; margin-top: 1px; border-radius: 2px; background-color: var(--empty);
+  background-image: repeating-linear-gradient(135deg, var(--empty-line) 0 1.5px, transparent 1.5px 5px); }
+.legend li .sw { box-shadow: inset 0 0 0 1px var(--border); border-radius: 2px; }
