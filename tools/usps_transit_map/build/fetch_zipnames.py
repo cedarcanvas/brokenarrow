@@ -91,25 +91,21 @@ def probe_hubs():
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         print(f"  - {page}: {e}")
         return
-    print(f"  + {page}: {len(links)} links")
-    subs = []
+    print(f"  + {page}: {len(links)} links (all shown)")
     for u, t in links:
-        if "postalpro" in u and re.search(r"label|L0\d\d|L6\d\d|L2\d\d|scf|ndc|facility", u + " " + t, re.I):
-            print(f"     {t[:80]!r} -> {u}")
-            subs.append(u)
-    # Follow pages that look like L005 / L002 / L006 lists and show their files.
-    for u in dict.fromkeys(subs):
-        if not re.search(r"L00[1-9]|L005|L002|scf", u, re.I) or re.search(r"\.(zip|xlsx?|txt|pdf)$", u, re.I):
-            continue
+        print(f"     {t[:70]!r} -> {u}")
+    # Likely direct pages for the 3-digit lists.
+    for name in ("L002", "L005", "L009", "L801", "L005_SCF", "L002_3digit"):
+        u = f"https://postalpro.usps.com/{name}"
         try:
             more = page_links(u)
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             print(f"   - {u}: {e}")
             continue
-        for u2, t2 in more:
-            if re.search(r"\.(zip|xlsx?|txt|csv)$", u2, re.I):
-                print(f"   file on {u}: {t2[:60]!r} -> {u2}")
-                show_file(u2)
+        files = [(u2, t2) for u2, t2 in more if re.search(r"\.(zip|xlsx?|txt|csv)$", u2, re.I)]
+        print(f"   + {u}: {len(more)} links, files: {files[:6]}")
+        for u2, _ in files[:2]:
+            show_file(u2)
 
 
 def show_file(url):
