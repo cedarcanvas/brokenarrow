@@ -319,7 +319,7 @@
     }
     return f._hub;
   }
-  const hubText = (n) => n ? `${n.h.name} · ${n.mi < 1 ? "under 1" : n.mi} mi` : "";
+  const hubText = (n) => n ? `${n.h.name}, ${n.h.st} · ${n.mi < 1 ? "under 1" : n.mi} mi` : "";
 
   // Markers: small squares for plants, larger diamonds for network hubs. Names
   // show when zoomed in (hubs first, then plants), or for the hovered marker.

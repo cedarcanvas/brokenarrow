@@ -111,14 +111,20 @@ def main():
         z = re.sub(r"\D", "", str(r["ZIP"]))[:5].zfill(5)
         kind = KINDS[r["FACILITY SUBTYPE"]]
         name = tidy(r["FACILITY NAME"])
-        if (name, kind) in seen:
+        st = str(r.get("FACILITY STATE", "")).strip()
+        # Many plants are named by city alone ("ABILENE"): add what they are,
+        # so they don't read like city labels on the map.
+        if not any(w.upper() in ABBR for w in name.split()):
+            name += {"Network Distribution Center (NDC/ASF)": " NDC",
+                     "Regional Distribution Center (RDC)": " RDC"}.get(r["FACILITY SUBTYPE"], " mail plant")
+        if (name, kind, st) in seen:
             continue
         ll = locate(z, pts, by3)
         if not ll:
             missed.append(f"{name} ({z})")
             continue
-        seen.add((name, kind))
-        hubs.append([name, kind, tidy(r.get("FACILITY CITY", "")), str(r.get("FACILITY STATE", "")).strip(), *ll])
+        seen.add((name, kind, st))
+        hubs.append([name, kind, tidy(r.get("FACILITY CITY", "")), st, *ll])
 
     if missed:
         print(f"  ! {len(missed)} could not be placed: {missed[:10]}")
