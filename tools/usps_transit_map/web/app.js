@@ -609,7 +609,11 @@
 
     // Origin prefix outline (halo + ink), then the origin ZIP and hovered ZIP.
     if (S.origin != null) {
-      if (isNet() && S.net) outline(nodeOutline(S.net.nodeOf[S.origin]), 3, 1.6);
+      if (isNet() && S.net) {
+        outline(nodeOutline(S.net.nodeOf[S.origin]), 3, 1.6);
+        const t = S.pinned ? target() : null;
+        if (t && S.net.nodeOf[t.i] >= 0) outline(nodeOutline(S.net.nodeOf[t.i]), 3, 1.6, false, C.dest);
+      }
       else outline(prefixOutline(S.origin), 2.6, 1.3);
     }
     if (!isNet()) {
@@ -818,7 +822,12 @@
     };
     ctx.lineCap = "round";
     const o = S.origin != null ? nodeOf[S.origin] : -1;
-    if (o >= 0) {
+    // A trip (origin pinned, destination set or hovered): show only its route.
+    const trip = S.pinned && S.originZip ? target() : null;
+    const tk = trip ? nodeOf[trip.i] : -1;
+    if (trip) {
+      // nothing here: the route is drawn over the dots below
+    } else if (o >= 0) {
       const row = S.rowCache || (S.rowCache = currentRow());
       const groups = BUCKETS.map(() => []);
       nodes.forEach((nd, k) => {
@@ -845,12 +854,13 @@
     nodes.forEach((nd, k) => {
       const [x, y] = scr[k];
       if (x < -20 || y < -20 || x > S.w + 20 || y > S.h + 20) return;
-      const r = 2 + Math.sqrt(nd.n) / 3.2;
-      ctx.beginPath(); ctx.arc(x, y, k === o ? r + 2 : r, 0, 2 * Math.PI);
-      ctx.fillStyle = k === o ? C.dest : C.ink; ctx.globalAlpha = k === o ? 1 : 0.75; ctx.fill();
+      const r = 2 + Math.sqrt(nd.n) / 3.2, on = k === o || k === tk;
+      ctx.beginPath(); ctx.arc(x, y, on ? r + 2 : r, 0, 2 * Math.PI);
+      ctx.fillStyle = on ? C.dest : C.ink; ctx.globalAlpha = on ? 1 : trip ? 0.3 : 0.75; ctx.fill();
       ctx.globalAlpha = 1; ctx.lineWidth = 1.2; ctx.strokeStyle = C.halo; ctx.stroke();
     });
-    if (o >= 0) drawChain(scr[o]);
+    if (trip) drawRoute(S.originZip, trip);
+    else if (o >= 0) drawChain(scr[o]);
   }
 
   const isNet = () => S.view !== "zip";
