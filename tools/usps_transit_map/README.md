@@ -34,6 +34,12 @@ it, then hover other ZIPs to read exact days.
   with nothing selected, lines join the areas with the fastest link. It is
   inferred from the published targets, not real truck routes.
   `build/probe_network.py` prints how cleanly the groups form in each build.
+- **USPS sorting chain:** `build/read_labeling.py` reads the USPS labeling
+  lists in `raw/labeling/` (L005 plant, L004 regional center, L601 package
+  hub; from FAST, see the README there) and writes `web/data/sort.json`. The
+  side panel shows each ZIP's chain, and the "USPS plants" map view groups
+  ZIPs by their official plant and draws the chain as a magenta line. Upload
+  newer lists to `raw/labeling/` to refresh it.
 - **Side panel:** on-time meters at the top, then the hover/trip readout
   (it replaces the floating tooltip), then the legend with a distribution bar
   per class. Hover a legend row to spotlight those ZIPs.

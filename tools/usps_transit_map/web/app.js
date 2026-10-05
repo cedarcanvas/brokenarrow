@@ -70,8 +70,10 @@
     fit: { k: 1, x: 0, y: 0 },
     colors: {},
     hubs: null, showHubs: true, hoverHub: null,
-    view: "zip",      // "zip" = ZIP areas colored by days; "net" = inferred plant network
-    net: null,        // {nodes, nodeOf, mesh}, built from First-Class days on first use
+    view: "zip",      // "zip" = ZIP areas colored by days; "net" = inferred plant areas; "usps" = official plants (SCF)
+    net: null,        // current network {nodes, nodeOf, mesh}; S.nets caches one per grouping
+    nets: {},
+    sort: null,       // official USPS sorting chain per prefix (data/sort.json), if present
   };
 
   const canvas = document.getElementById("map");
@@ -109,6 +111,10 @@
     fetch("data/zipnames.json").then(r => (r.ok ? r.json() : null)).then((n) => {
       if (!n) return;
       S.names = n; buildCityIndex(); legend();
+    }).catch(() => {});
+    // Optional: official USPS sorting chain (made by build/read_labeling.py).
+    fetch("data/sort.json").then(r => (r.ok ? r.json() : null)).then((d) => {
+      if (d && d.f) { buildSort(d); legend(); }
     }).catch(() => {});
     // Optional: fastest / slowest ZIP prefixes (made by build/rank_zips.py).
     fetch("data/rank.json").then(r => (r.ok ? r.json() : null)).then((r) => {
@@ -585,7 +591,7 @@
       // Spotlight: fade other groups over a solid base, so the "no ZIP code"
       // hatching underneath never shows through.
       if (dim) { ctx.fillStyle = C.land; ctx.fill(S.zip3Paths[i], "evenodd"); ctx.globalAlpha = 0.15; }
-      ctx.fillStyle = row && S.view !== "net" ? C.bucket[bkt(row[i])] : C.land;
+      ctx.fillStyle = row && !isNet() ? C.bucket[bkt(row[i])] : C.land;
       ctx.fill(S.zip3Paths[i], "evenodd");
       ctx.globalAlpha = 1;
     }
@@ -596,13 +602,13 @@
     }
     ctx.lineWidth = Math.min(1.2, 0.35 * Math.sqrt(S.t.k)) / k;
     ctx.strokeStyle = C.zip3; ctx.stroke(S.meshZip3);
-    if (S.view === "net" && S.net) { ctx.lineWidth = 1.4 / k; ctx.strokeStyle = C.ink2; ctx.stroke(S.net.mesh); }
+    if (isNet() && S.net) { ctx.lineWidth = 1.4 / k; ctx.strokeStyle = C.ink2; ctx.stroke(S.net.mesh); }
     ctx.lineWidth = 2.6 / k; ctx.strokeStyle = C.stateHalo; ctx.stroke(S.meshState);
     ctx.lineWidth = 1.1 / k; ctx.strokeStyle = C.state; ctx.stroke(S.meshState);
 
     // Origin prefix outline (halo + ink), then the origin ZIP and hovered ZIP.
     if (S.origin != null) {
-      if (S.view === "net" && S.net) outline(nodeOutline(S.net.nodeOf[S.origin]), 3, 1.6);
+      if (isNet() && S.net) outline(nodeOutline(S.net.nodeOf[S.origin]), 3, 1.6);
       else outline(prefixOutline(S.origin), 2.6, 1.3);
     }
     if (S.originZip && S.pinned) outline(S.originZip.path, 2.2, 1, true);
@@ -611,8 +617,8 @@
 
     // City labels and panel labels (screen-sized text)
     ctx.setTransform(d, 0, 0, d, 0, 0);
-    if (S.view === "net") drawNetwork();
-    drawPrefixes(drawCities(S.view === "net" ? [] : drawHubs()));
+    if (isNet()) drawNetwork();
+    drawPrefixes(drawCities(isNet() ? [] : drawHubs()));
     if (S.dest) {
       const [[x0, y0], [x1, y1]] = S.dest.bbox;
       const [mx, my] = toScreen((x0 + x1) / 2, (y0 + y1) / 2);
@@ -635,14 +641,16 @@
   // processing plant have identical First-Class days to and from everywhere.
   // Grouping identical prefixes gives the plants' service areas ("nodes").
   // Lines between nodes are colored by days. Inferred, not actual truck routes.
-  function buildNetwork() {
+  function buildNetwork(mode) {
     const D = S.days.fcm, N = S.N;
     const hash = (get) => { let h = 2166136261; for (let j = 0; j < N; j++) { h ^= get(j); h = Math.imul(h, 16777619); } return h >>> 0; };
     const byKey = new Map(), nodeOf = new Int32Array(N).fill(-1), nodes = [];
     for (let i = 0; i < N; i++) {
       if (!S.zip3Count[i]) continue;
       const z = S.zip3[i];
-      const key = `${z.p}|${hash(j => D[i * N + j])}|${hash(j => D[j * N + i])}`;
+      const c = mode === "usps" && S.sort ? S.sort.z[z.z] : null;
+      const key = mode === "usps" ? `${z.p}|${c ? c[0] : "x" + i}`
+        : `${z.p}|${hash(j => D[i * N + j])}|${hash(j => D[j * N + i])}`;
       let k = byKey.get(key);
       if (k === undefined) { k = nodes.length; byKey.set(key, k); nodes.push({ members: [], n: 0, x: 0, y: 0, lon: 0, lat: 0, p: z.p }); }
       nodeOf[i] = k;
@@ -666,7 +674,7 @@
         nodeOf[a.properties.i] !== nodeOf[b.properties.i]);
       d3.geoPath(S.projs[p]).context(mesh)(m);
     });
-    S.net = { nodes, nodeOf, mesh, outlines: new Map() };
+    return { mode, nodes, nodeOf, mesh, outlines: new Map() };
   }
 
   // Outer edge of one plant area (cached).
@@ -752,23 +760,91 @@
       ctx.fillStyle = k === o ? C.dest : C.ink; ctx.globalAlpha = k === o ? 1 : 0.75; ctx.fill();
       ctx.globalAlpha = 1; ctx.lineWidth = 1.2; ctx.strokeStyle = C.halo; ctx.stroke();
     });
+    if (o >= 0) drawChain(scr[o]);
   }
 
+  const isNet = () => S.view !== "zip";
+
+  // ---------- official sorting chain (USPS labeling lists) ----------
+  // data/sort.json: f = facilities [level, name, ST, zip, lon, lat]; z = prefix -> [SCF, ADC, hub].
+  function buildSort(d) {
+    const f = d.f.map(([level, name, st, zip, lon, lat]) => {
+      const p = lon == null ? -1 : panelFor(lon, lat);
+      const xy = p >= 0 && S.projs[p] ? S.projs[p]([lon, lat]) : null;
+      return { level, name, st, zip, p, x: xy && xy[0], y: xy && xy[1] };
+    });
+    S.sort = { date: d.date, f, z: d.z };
+    $("viewbtns").querySelector('[data-v="usps"]').hidden = false;
+  }
+  const chainOf = (i) => {
+    const c = S.sort && S.sort.z[S.zip3[i].z];
+    return c ? c.map(k => (k >= 0 ? S.sort.f[k] : null)) : null;
+  };
+  const LEVEL_NAMES = { SCF: "plant", ADC: "regional center", NDC: "package hub (NDC)", RPDC: "package hub (RPDC)" };
+  function chainText(i) {
+    const c = chainOf(i);
+    if (!c) return "";
+    const [scf, adc, hub] = c;
+    return [scf && `Plant: ${scf.name}`, adc && `regional center: ${adc.name}`,
+            hub && `packages: ${hub.name} ${hub.level}`].filter(Boolean).join(" → ");
+  }
+
+  // The origin's chain on the map: area -> SCF -> ADC -> package hub, as one magenta path.
+  function drawChain(fromXY) {
+    const c = S.origin != null && chainOf(S.origin);
+    if (!c) return;
+    const C = S.colors, pts = [{ x: fromXY[0], y: fromXY[1], tags: [] }];
+    c.forEach((f) => {
+      if (!f || f.x == null) return;
+      const [x, y] = toScreen(f.x, f.y), last = pts[pts.length - 1];
+      if (Math.hypot(last.x - x, last.y - y) < 4) last.tags.push(f.level);
+      else pts.push({ x, y, tags: [f.level], name: f.name });
+      if (!last.name && Math.hypot(last.x - x, last.y - y) < 4) last.name = f.name;
+    });
+    ctx.save();
+    ctx.setLineDash([7, 4]); ctx.lineCap = "round";
+    ctx.beginPath(); pts.forEach((q, j) => (j ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+    ctx.lineWidth = 5; ctx.strokeStyle = C.halo; ctx.stroke();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = C.dest; ctx.stroke();
+    ctx.restore();
+    ctx.font = "600 11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+    ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+    pts.forEach((q) => {
+      if (!q.tags.length) return;
+      ctx.beginPath(); ctx.rect(q.x - 5, q.y - 5, 10, 10);
+      ctx.fillStyle = C.dest; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.halo; ctx.stroke();
+      const t = `${q.name || ""} ${q.tags.join(" · ")}`.trim();
+      ctx.lineWidth = 3.5; ctx.strokeStyle = C.halo; ctx.strokeText(t, q.x + 9, q.y);
+      ctx.fillStyle = C.ink; ctx.fillText(t, q.x + 9, q.y);
+    });
+    ctx.textBaseline = "alphabetic";
+  }
   async function setView(v) {
-    if (v === "net" && !S.net) {
+    if (v !== "zip") {
       if (!S.days.fcm) S.days.fcm = new Uint8Array(await fetch("data/days_fcm.bin").then(r => r.arrayBuffer()));
-      buildNetwork();
+      S.net = S.nets[v] || (S.nets[v] = buildNetwork(v));
     }
     S.view = v;
     for (const b of document.querySelectorAll("#viewbtns button")) b.setAttribute("aria-checked", b.dataset.v === v);
-    $("netNote").hidden = v !== "net";
-    if (v === "net") netNote();
+    $("netNote").hidden = v === "zip";
+    if (v !== "zip") netNote();
     draw(); legend();
   }
   document.querySelectorAll("#viewbtns button").forEach(b => b.addEventListener("click", () => setView(b.dataset.v)));
 
   function netNote() {
     const n = S.net, nd = S.origin != null ? n.nodes[n.nodeOf[S.origin]] : null;
+    if (n.mode === "usps") {
+      const f = nd && chainOf(S.origin);
+      $("netNote").innerHTML = nd
+        ? `<b>${f && f[0] ? esc(f[0].name + ", " + f[0].st) : S.zip3[S.origin].z + "xx"} plant (SCF):</b> serves ${nd.members.length}
+           ZIP prefix${nd.members.length > 1 ? "es" : ""} (${nd.members.slice(0, 8).map(i => S.zip3[i].z + "xx").join(", ")}${nd.members.length > 8 ? "…" : ""}),
+           ${nd.n.toLocaleString()} ZIP codes. ${chainText(S.origin)}. Lines show days to every other plant.`
+        : `<b>USPS plants.</b> Each dot is one of USPS's ${n.nodes.length} local plants (SCFs), from the official labeling
+           lists${S.sort.date ? ` dated ${S.sort.date}` : ""}, placed at the middle of the ZIP prefixes it serves. Hover a ZIP to see
+           its sorting chain (the magenta line: plant → regional center → package hub) and days to every other plant.`;
+      return;
+    }
     const plant = nd && nodePlant(nd);
     $("netNote").innerHTML = nd
       ? `<b>Plant area of ${S.zip3[S.origin].z}xx:</b> ${nd.members.length} ZIP prefix${nd.members.length > 1 ? "es" : ""}
@@ -986,12 +1062,13 @@
       ? `${cityOf(oz)} · ${o.s || "—"} · prefix ${o.z}xx${S.pinned ? " · pinned" : ""}`
       : "Hover over the map, or click a ZIP to pin it.";
     $("unpin").hidden = !S.pinned;
-    const nh = nearestHub(oz);
-    $("originHub").hidden = !nh;
-    if (nh) $("originHub").innerHTML = `<span class="hubmark"></span>Nearest mail plant: ${esc(hubText(nh))}`;
+    const nh = nearestHub(oz), ct = oz && chainText(oz.i);
+    $("originHub").hidden = !(nh || ct);
+    if (ct) $("originHub").innerHTML = `<span class="hubmark"></span>USPS sorting: ${esc(ct)}`;
+    else if (nh) $("originHub").innerHTML = `<span class="hubmark"></span>Nearest mail plant: ${esc(hubText(nh))}`;
     perfPanel();
     readout();
-    if (S.view === "net" && S.net) netNote();
+    if (isNet() && S.net) netNote();
   }
 
   // Hover / trip readout in the right margin (replaces a floating tooltip).
