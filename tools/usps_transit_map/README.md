@@ -34,6 +34,11 @@ it, then hover other ZIPs to read exact days.
   with nothing selected, lines join the areas with the fastest link. It is
   inferred from the published targets, not real truck routes.
   `build/probe_network.py` prints how cleanly the groups form in each build.
+- **Plant areas and trips:** hovering outlines the hovered ZIP's mail-plant
+  service area in red. The first click sets the origin, the second the
+  destination; the map then shows only the two plant areas and a best-guess
+  route through the USPS sorting chain (letters via the destination's
+  regional center, packages via the package hubs).
 - **USPS sorting chain:** `build/read_labeling.py` reads the USPS labeling
   lists in `raw/labeling/` (L005 plant, L004 regional center, L601 package
   hub; from FAST, see the README there) and writes `web/data/sort.json`. The

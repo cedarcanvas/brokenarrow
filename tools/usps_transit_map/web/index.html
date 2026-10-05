@@ -12,7 +12,8 @@
 <header class="top">
   <div class="title">
     <h1>USPS Delivery Days</h1>
-    <p class="sub">Hover over a ZIP code to see delivery days to the rest of the country.</p>
+    <p class="sub">Hover over a ZIP code to see its mail plant's area (red) and delivery days to the rest of the country.
+      Click once for the origin, again for the destination.</p>
   </div>
   <div class="controls">
     <div class="classes" role="radiogroup" aria-label="Mail class" id="classes"></div>
@@ -120,6 +121,12 @@
         one such group (a “plant area”), placed at its ZIP-weighted center; lines are colored by the days between areas.
         With no ZIP selected, lines join areas that reach each other in the fewest days. This is inferred from the
         published targets: real truck and air routes are not public.</li>
+      <li><strong>Trips and likely routes:</strong> the red outline is the area served by the hovered ZIP's mail
+        plant (from USPS labeling list L005, or inferred from delivery days if the lists are missing). Click one ZIP
+        for the origin and a second for the destination: the map then shows only those two plant areas and a likely
+        route between them. Letters and flats: origin plant → the destination's regional center (when different) →
+        destination plant. Packages: origin plant → package hub(s) → destination plant. This is a best guess from the
+        labeling lists; actual trucks and flights can differ. Click a third ZIP to start a new trip, or the origin to clear.</li>
       <li><strong>USPS sorting chain:</strong> USPS labeling lists L005 (local plant, SCF), L004 (regional center, ADC)
         and L601 (package hub: Network Distribution Center, or one of the new Regional Processing &amp; Distribution
         Centers) from <a href="https://fast.usps.com/">USPS FAST</a>. They say where mail for each ZIP prefix is sent

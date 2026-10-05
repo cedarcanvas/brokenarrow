@@ -24,6 +24,7 @@
   --d1: #f0f9e8; --d2: #ccebc5; --d3: #a8ddb5; --d4: #7bccc4;
   --d5: #4eb3d3; --d6: #2b8cbe; --d7: #08589e;
   --dest: #c51b7d;  /* warm accents stand apart from the green-blue map */
+  --plant: #e8000b; /* mail-plant service area outline, same in both themes */
   --hub: #d95f0e;   /* plant markers, same in both themes */
   /* On-time meters: one blue ramp (validated --ordinal), in its own panel */
   --m0: #184f95; --m1: #3987e5; --m3: #86b6ef; --mtrack: #e6e5df; --mnat: #0b0b0b;

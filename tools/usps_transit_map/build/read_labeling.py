@@ -121,6 +121,17 @@ def main():
                                if re.search(r"_(\d{4})(\d{2})(\d{2})_", n)), None)
     date = f"{MONTHS[int(m[2]) - 1]} {int(m[3])}, {m[1]}" if m else ""
 
+    # A facility on a ZIP prefix with no map shape (e.g. 192xx, Philadelphia NDC)
+    # goes to the middle of the prefixes it serves instead.
+    for k, f in enumerate(facilities):
+        if f[4] is None:
+            pts = [zip3[z]["c"] for z, c in chain.items() if k in c and zip3.get(z, {}).get("c")]
+            if pts:
+                f[4] = round(sum(p[0] for p in pts) / len(pts), 3)
+                f[5] = round(sum(p[1] for p in pts) / len(pts), 3)
+    missing = [f"{f[1]} {f[0]}" for f in facilities if f[4] is None]
+    if missing:
+        print(f"  ! no location for: {missing}")
     levels = Counter(f[0] for f in facilities)
     out = {"date": date, "f": facilities, "z": dict(sorted(chain.items()))}
     (DATA / "sort.json").write_text(json.dumps(out, separators=(",", ":")))
