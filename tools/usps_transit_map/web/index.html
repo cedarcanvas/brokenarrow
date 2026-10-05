@@ -72,6 +72,7 @@
     <p class="legend-note" id="legendNote"></p>
     <p class="nozip"><span class="sw-empty"></span>No ZIP code here: mostly unpopulated land (national forests,
       deserts, ranges, the North Maine Woods). Census ZIP code areas only cover places where people live or get mail.</p>
+    <section class="rank" id="rank" hidden aria-label="Fastest and slowest ZIP prefixes"></section>
     <div class="hubkey" id="hubkey" hidden>
       <label><input type="checkbox" id="showHubs" checked> Show USPS mail plants</label>
       <div class="hubkinds">
@@ -108,6 +109,10 @@
         USPS's <a href="https://about.usps.com/what/performance/service-performance/zip-3-by-area-district.htm">ZIP-to-district list</a>.</li>
       <li><strong>ZIP city names:</strong> USPS <a href="https://postalpro.usps.com/ZIP_Locale_Detail">ZIP Code Locale Detail</a>
         (post office city for each ZIP). You can type a city name in the From / To boxes.</li>
+      <li><strong>Fastest and slowest:</strong> for each mail class, every ZIP prefix is ranked by its average
+        USPS delivery days to every ZIP code in the country (“mailing from”), or from every ZIP code (“receiving at”),
+        with each ZIP code counted once. “Lower 48” leaves Alaska, Hawaii and the territories out at both ends.
+        These are USPS targets, not measured times.</li>
       <li><strong>Mail plants:</strong> USPS PostalPro
         <a href="https://postalpro.usps.com/service-hubs-and-facilities/facilityfile">Facility File</a>:
         Processing &amp; Distribution Centers and Facilities (squares) and Network / Regional Distribution Centers
