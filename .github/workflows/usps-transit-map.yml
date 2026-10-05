@@ -111,6 +111,10 @@ jobs:
         continue-on-error: true
         run: python build/rank_zips.py
 
+      - name: "Probe: inferred plant network (optional)"
+        continue-on-error: true
+        run: python build/probe_network.py
+
       # Site layout: the landing page (tools/maps_site) at the root and this
       # map under /usps/, so more maps can sit next to it later.
       - name: Assemble the site
