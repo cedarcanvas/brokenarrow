@@ -70,6 +70,8 @@
     fit: { k: 1, x: 0, y: 0 },
     colors: {},
     hubs: null, showHubs: true, hoverHub: null,
+    view: "zip",      // "zip" = ZIP areas colored by days; "net" = inferred plant network
+    net: null,        // {nodes, nodeOf, mesh}, built from First-Class days on first use
   };
 
   const canvas = document.getElementById("map");
@@ -583,7 +585,7 @@
       // Spotlight: fade other groups over a solid base, so the "no ZIP code"
       // hatching underneath never shows through.
       if (dim) { ctx.fillStyle = C.land; ctx.fill(S.zip3Paths[i], "evenodd"); ctx.globalAlpha = 0.15; }
-      ctx.fillStyle = row ? C.bucket[bkt(row[i])] : C.land;
+      ctx.fillStyle = row && S.view !== "net" ? C.bucket[bkt(row[i])] : C.land;
       ctx.fill(S.zip3Paths[i], "evenodd");
       ctx.globalAlpha = 1;
     }
@@ -594,18 +596,23 @@
     }
     ctx.lineWidth = Math.min(1.2, 0.35 * Math.sqrt(S.t.k)) / k;
     ctx.strokeStyle = C.zip3; ctx.stroke(S.meshZip3);
+    if (S.view === "net" && S.net) { ctx.lineWidth = 1.4 / k; ctx.strokeStyle = C.ink2; ctx.stroke(S.net.mesh); }
     ctx.lineWidth = 2.6 / k; ctx.strokeStyle = C.stateHalo; ctx.stroke(S.meshState);
     ctx.lineWidth = 1.1 / k; ctx.strokeStyle = C.state; ctx.stroke(S.meshState);
 
     // Origin prefix outline (halo + ink), then the origin ZIP and hovered ZIP.
-    if (S.origin != null) outline(prefixOutline(S.origin), 2.6, 1.3);
+    if (S.origin != null) {
+      if (S.view === "net" && S.net) outline(nodeOutline(S.net.nodeOf[S.origin]), 3, 1.6);
+      else outline(prefixOutline(S.origin), 2.6, 1.3);
+    }
     if (S.originZip && S.pinned) outline(S.originZip.path, 2.2, 1, true);
     if (S.hover && S.hover !== S.originZip && S.hover !== S.dest) outline(S.hover.path, 2, 1);
     if (S.dest) outline(S.dest.path, 3, 1.8, false, C.dest);
 
     // City labels and panel labels (screen-sized text)
     ctx.setTransform(d, 0, 0, d, 0, 0);
-    drawPrefixes(drawCities(drawHubs()));
+    if (S.view === "net") drawNetwork();
+    drawPrefixes(drawCities(S.view === "net" ? [] : drawHubs()));
     if (S.dest) {
       const [[x0, y0], [x1, y1]] = S.dest.bbox;
       const [mx, my] = toScreen((x0 + x1) / 2, (y0 + y1) / 2);
@@ -621,6 +628,156 @@
       const roomy = (P.box[1][0] - P.box[0][0]) * scale() > 150;
       if (x > -100 && y > -20 && x < S.w && y < S.h) ctx.fillText(roomy ? P.name : P.short, x, y + 9);
     });
+  }
+
+  // ---------- network view ----------
+  // USPS sets delivery days plant to plant, so ZIP prefixes served by the same
+  // processing plant have identical First-Class days to and from everywhere.
+  // Grouping identical prefixes gives the plants' service areas ("nodes").
+  // Lines between nodes are colored by days. Inferred, not actual truck routes.
+  function buildNetwork() {
+    const D = S.days.fcm, N = S.N;
+    const hash = (get) => { let h = 2166136261; for (let j = 0; j < N; j++) { h ^= get(j); h = Math.imul(h, 16777619); } return h >>> 0; };
+    const byKey = new Map(), nodeOf = new Int32Array(N).fill(-1), nodes = [];
+    for (let i = 0; i < N; i++) {
+      if (!S.zip3Count[i]) continue;
+      const z = S.zip3[i];
+      const key = `${z.p}|${hash(j => D[i * N + j])}|${hash(j => D[j * N + i])}`;
+      let k = byKey.get(key);
+      if (k === undefined) { k = nodes.length; byKey.set(key, k); nodes.push({ members: [], n: 0, x: 0, y: 0, lon: 0, lat: 0, p: z.p }); }
+      nodeOf[i] = k;
+      const nd = nodes[k], w = S.zip3Count[i];
+      nd.members.push(i);
+      if (z.c) {
+        const xy = S.projs[z.p](z.c);
+        if (xy) { nd.x += xy[0] * w; nd.y += xy[1] * w; nd.lon += z.c[0] * w; nd.lat += z.c[1] * w; nd.w = (nd.w || 0) + w; }
+      }
+      nd.n += w;
+    }
+    for (const nd of nodes) {
+      const w = nd.w || 1;
+      nd.x /= w; nd.y /= w; nd.lon /= w; nd.lat /= w;
+      nd.rep = nd.members.reduce((a, b) => (S.zip3Count[b] > S.zip3Count[a] ? b : a));
+    }
+    // Lines between plant areas, drawn per panel.
+    const mesh = new Path2D(), obj = S.topo.objects.zcta;
+    PANELS.forEach((_, p) => {
+      const m = topojson.mesh(S.topo, obj, (a, b) => a.properties.p === p && a !== b &&
+        nodeOf[a.properties.i] !== nodeOf[b.properties.i]);
+      d3.geoPath(S.projs[p]).context(mesh)(m);
+    });
+    S.net = { nodes, nodeOf, mesh, outlines: new Map() };
+  }
+
+  // Outer edge of one plant area (cached).
+  function nodeOutline(k) {
+    const O = S.net.outlines;
+    if (!O.has(k)) {
+      const nd = S.net.nodes[k], geoms = nd.members.flatMap(i => S.geomsByI[i]), out = new Path2D();
+      if (geoms.length) {
+        const m = topojson.mesh(S.topo, { type: "GeometryCollection", geometries: geoms }, (a, b) => a === b);
+        d3.geoPath(S.projs[nd.p]).context(out)(m);
+      }
+      O.set(k, out);
+    }
+    return O.get(k);
+  }
+
+  // Nearest processing plant to a plant area, for its name.
+  function nodePlant(nd) {
+    if (!S.hubs) return null;
+    if (nd.plant === undefined) {
+      let best = null, bd = Infinity;
+      for (const h of S.hubs) {
+        if (h.kind !== "P") continue;
+        const dd = d3.geoDistance([nd.lon, nd.lat], [h.lon, h.lat]);
+        if (dd < bd) { bd = dd; best = h; }
+      }
+      nd.plant = best;
+    }
+    return nd.plant;
+  }
+
+  // Lines from the origin's plant area to every other one, colored by days
+  // (slowest drawn first so the fast ones sit on top). With no origin, only
+  // the fastest links in the class, which outline the regional networks.
+  function drawNetwork() {
+    if (!S.net || !S.days[S.cls]) return;
+    const C = S.colors, { nodes, nodeOf } = S.net, N = S.N, D = S.days[S.cls];
+    const scr = nodes.map(nd => toScreen(nd.x, nd.y));
+    const curve = (a, b) => {
+      const [x1, y1] = scr[a], [x2, y2] = scr[b], mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const dx = x2 - x1, dy = y2 - y1, bend = 0.12;
+      ctx.moveTo(x1, y1); ctx.quadraticCurveTo(mx - dy * bend, my + dx * bend, x2, y2);
+    };
+    const line = (pairs, color, w, alpha = 1) => {
+      if (!pairs.length) return;
+      ctx.beginPath(); pairs.forEach(([a, b]) => curve(a, b));
+      // Dark casing so the palest (fastest) colors still show on light land.
+      if (alpha === 1) { ctx.lineWidth = w + 1.4; ctx.strokeStyle = C.ink; ctx.globalAlpha = 0.35; ctx.stroke(); }
+      ctx.globalAlpha = alpha; ctx.lineWidth = w; ctx.strokeStyle = color; ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+    ctx.lineCap = "round";
+    const o = S.origin != null ? nodeOf[S.origin] : -1;
+    if (o >= 0) {
+      const row = S.rowCache || (S.rowCache = currentRow());
+      const groups = BUCKETS.map(() => []);
+      nodes.forEach((nd, k) => {
+        if (k === o) return;
+        const b = bkt(row[nd.rep]);
+        if (S.focus != null && b !== S.focus) return;
+        groups[b].push([o, k]);
+      });
+      for (let b = BUCKETS.length - 1; b >= 0; b--) line(groups[b], C.bucket[b], b === NONE ? 0.6 : 1.3);
+    } else {
+      const F = S.net.fast || (S.net.fast = {});
+      if (!F[S.cls]) {
+        let fastest = 255;
+        for (const a of nodes) for (const b of nodes) { const v = D[a.rep * N + b.rep]; if (a !== b && v && v < fastest) fastest = v; }
+        const pairs = [];
+        nodes.forEach((a, i) => nodes.forEach((b, j) => {
+          if (j > i && a.p === b.p && D[a.rep * N + b.rep] === fastest && D[b.rep * N + a.rep] === fastest) pairs.push([i, j]);
+        }));
+        F[S.cls] = { fastest, pairs };
+      }
+      line(F[S.cls].pairs, C.ink2, 0.8, 0.55);
+    }
+    // Plant-area dots, sized by ZIP codes served.
+    nodes.forEach((nd, k) => {
+      const [x, y] = scr[k];
+      if (x < -20 || y < -20 || x > S.w + 20 || y > S.h + 20) return;
+      const r = 2 + Math.sqrt(nd.n) / 3.2;
+      ctx.beginPath(); ctx.arc(x, y, k === o ? r + 2 : r, 0, 2 * Math.PI);
+      ctx.fillStyle = k === o ? C.dest : C.ink; ctx.globalAlpha = k === o ? 1 : 0.75; ctx.fill();
+      ctx.globalAlpha = 1; ctx.lineWidth = 1.2; ctx.strokeStyle = C.halo; ctx.stroke();
+    });
+  }
+
+  async function setView(v) {
+    if (v === "net" && !S.net) {
+      if (!S.days.fcm) S.days.fcm = new Uint8Array(await fetch("data/days_fcm.bin").then(r => r.arrayBuffer()));
+      buildNetwork();
+    }
+    S.view = v;
+    for (const b of document.querySelectorAll("#viewbtns button")) b.setAttribute("aria-checked", b.dataset.v === v);
+    $("netNote").hidden = v !== "net";
+    if (v === "net") netNote();
+    draw(); legend();
+  }
+  document.querySelectorAll("#viewbtns button").forEach(b => b.addEventListener("click", () => setView(b.dataset.v)));
+
+  function netNote() {
+    const n = S.net, nd = S.origin != null ? n.nodes[n.nodeOf[S.origin]] : null;
+    const plant = nd && nodePlant(nd);
+    $("netNote").innerHTML = nd
+      ? `<b>Plant area of ${S.zip3[S.origin].z}xx:</b> ${nd.members.length} ZIP prefix${nd.members.length > 1 ? "es" : ""}
+         (${nd.members.slice(0, 8).map(i => S.zip3[i].z + "xx").join(", ")}${nd.members.length > 8 ? "…" : ""}),
+         ${nd.n.toLocaleString()} ZIP codes${plant ? `. Nearest plant: ${esc(plant.name)}, ${plant.st}` : ""}.
+         Lines show days to every other plant area.`
+      : `<b>Network view.</b> Each dot is a plant area: ZIP prefixes with identical First-Class delivery days to and from
+         everywhere, so most likely sorted at the same plant (${n.nodes.length} areas). Lines join areas that reach each
+         other in the fewest days. Hover a ZIP to see its plant area's links. Inferred from USPS targets; not actual truck routes.`;
   }
 
   // Outer edge of one ZIP prefix (cached): arcs used by only one of its ZIPs.
@@ -834,6 +991,7 @@
     if (nh) $("originHub").innerHTML = `<span class="hubmark"></span>Nearest mail plant: ${esc(hubText(nh))}`;
     perfPanel();
     readout();
+    if (S.view === "net" && S.net) netNote();
   }
 
   // Hover / trip readout in the right margin (replaces a floating tooltip).
