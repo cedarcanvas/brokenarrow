@@ -107,6 +107,10 @@ jobs:
         continue-on-error: true
         run: python build/fetch_hubs.py
 
+      - name: Rank fastest and slowest ZIP prefixes (optional)
+        continue-on-error: true
+        run: python build/rank_zips.py
+
       # Site layout: the landing page (tools/maps_site) at the root and this
       # map under /usps/, so more maps can sit next to it later.
       - name: Assemble the site

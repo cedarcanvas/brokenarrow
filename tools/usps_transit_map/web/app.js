@@ -38,15 +38,16 @@
 
   // ---------- map layout ----------
   // Everything is drawn in a fixed "virtual" space, then scaled to fit the screen.
-  // Lower 48 on top, the inset boxes in a row underneath.
-  const VW = 1000, VH = 660;
+  // Alaska, Hawaii and the territories in a column of boxes on the left, the
+  // lower 48 filling the rest.
+  const VW = 1000, VH = 600;
   const PANELS = [
-    { name: "Lower 48", short: "", rot: [96, 0], box: [[10, 10], [990, 540]] },
-    { name: "Alaska", short: "AK", rot: [152, 0], box: [[10, 556], [250, 650]] },
-    { name: "Hawaii", short: "HI", rot: [157, 0], box: [[262, 556], [442, 650]] },
-    { name: "Puerto Rico & USVI", short: "PR · VI", rot: [66, 0], box: [[454, 556], [634, 650]] },
-    { name: "Guam & N. Mariana Is.", short: "GU · MP", rot: [-145, 0], box: [[646, 556], [816, 650]] },
-    { name: "American Samoa", short: "AS", rot: [170, 0], box: [[828, 556], [990, 650]] },
+    { name: "Lower 48", short: "", rot: [96, 0], box: [[252, 10], [990, 590]] },
+    { name: "Alaska", short: "AK", rot: [152, 0], box: [[10, 10], [240, 222]] },
+    { name: "Hawaii", short: "HI", rot: [157, 0], box: [[10, 232], [240, 340]] },
+    { name: "Puerto Rico & USVI", short: "PR · VI", rot: [66, 0], box: [[10, 350], [240, 440]] },
+    { name: "Guam & N. Mariana Is.", short: "GU · MP", rot: [-145, 0], box: [[10, 450], [240, 524]] },
+    { name: "American Samoa", short: "AS", rot: [170, 0], box: [[10, 534], [240, 590]] },
   ];
   const PAD = 8;
 
@@ -107,6 +108,10 @@
       if (!n) return;
       S.names = n; buildCityIndex(); legend();
     }).catch(() => {});
+    // Optional: fastest / slowest ZIP prefixes (made by build/rank_zips.py).
+    fetch("data/rank.json").then(r => (r.ok ? r.json() : null)).then((r) => {
+      if (r && r.classes) { S.rank = r; rankPanel(); }
+    }).catch(() => {});
     // Optional: USPS mail processing plants (made by build/fetch_hubs.py).
     fetch("data/hubs.json").then(r => (r.ok ? r.json() : null)).then((h) => {
       if (!h || !h.h || !h.h.length) return;
@@ -141,7 +146,7 @@
       const buf = await fetch(`data/days_${k}.bin`).then(r => r.arrayBuffer());
       S.days[k] = new Uint8Array(buf);
     }
-    writeHash(); draw(); legend(); showTip(); status();
+    writeHash(); draw(); legend(); showTip(); status(); rankPanel();
   }
 
   // ---------- geometry ----------
@@ -273,10 +278,13 @@
       ctx.font = `${big ? 600 : 500} ${(big ? 12 : 11) - (small ? 1 : 0)}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
       const w = ctx.measureText(c.name).width, h = big ? 13 : 12;
       // Label to the right of the dot; try the left side if that's taken.
+      // Labels in an inset box stay inside that box.
+      const pb = c.p ? [...toScreen(...PANELS[c.p].box[0]), ...toScreen(...PANELS[c.p].box[1])] : null;
       let box = null;
       for (const lx of [sx + 5, sx - 5 - w]) {
         const b = [lx - 2, sy - h / 2 - 1, lx + w + 2, sy + h / 2 + 1];
         if (b[0] < 0 || b[2] > S.w) continue;
+        if (pb && (b[0] < pb[0] || b[2] > pb[2] || b[1] < pb[1] || b[3] > pb[3])) continue;
         if (!placed.some(q => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1])) { box = b; break; }
       }
       if (!box) continue;
@@ -886,6 +894,36 @@
     S.originZip = f;
     S.origin = f ? f.i : null;
     if (changed) { legend(); status(); }
+  }
+
+  // ---------- fastest / slowest ZIP prefixes ----------
+  // Average USPS days to (or from) every ZIP code in the country, per prefix.
+  // Click a row to start from that prefix.
+  function rankPanel() {
+    const box = $("rank"), R = S.rank && S.rank.classes[S.cls];
+    box.hidden = !R;
+    if (!R) return;
+    const way = S.rankWay || "send", d = R[way], fast = R.fast_days;
+    const row = ([z, name, days, share]) => `<li><button type="button" data-z="${z}">
+        <span class="rz">${z}xx</span><span class="rn">${esc(name)}</span>
+        <span class="rd">${days.toFixed(2)} days<small>${Math.round(share)}% in ${fast} days</small></span></button></li>`;
+    const far = d.slow[0];
+    box.innerHTML = `<h3>Fastest and slowest ZIP prefixes</h3>
+      <div class="seg" role="radiogroup" aria-label="Direction">
+        <button type="button" role="radio" data-w="send" aria-checked="${way === "send"}">Mailing from</button>
+        <button type="button" role="radio" data-w="recv" aria-checked="${way === "recv"}">Receiving at</button>
+      </div>
+      <p class="muted">${esc(R.label)}: average USPS days ${way === "send" ? "to" : "from"} every ZIP code in the country.
+        National average ${R.national.toFixed(2)} days.</p>
+      <h4>Fastest</h4><ol>${d.fast.map(row).join("")}</ol>
+      <h4>Slowest in the lower 48</h4><ol>${d.slow48.map(row).join("")}</ol>
+      <p class="muted">Alaska, Hawaii and the territories are slowest overall${far ? ` (up to ${far[2].toFixed(1)} days)` : ""}.
+        Click a row to start from there.</p>`;
+    box.querySelectorAll(".seg button").forEach(b => b.onclick = () => { S.rankWay = b.dataset.w; rankPanel(); });
+    box.querySelectorAll("li button").forEach(b => b.onclick = () => {
+      const f = S.feats.find(f => S.zip3[f.i].z === b.dataset.z);
+      if (f) { if (S.pinned) setDest(null); pinZip(f, true); }
+    });
   }
 
   function pinZip(f, zoomTo) {
