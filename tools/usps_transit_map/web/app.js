@@ -901,25 +901,26 @@
   // Click a row to start from that prefix.
   function rankPanel() {
     const box = $("rank"), R = S.rank && S.rank.classes[S.cls];
-    box.hidden = !R;
-    if (!R) return;
-    const way = S.rankWay || "send", d = R[way], fast = R.fast_days;
+    box.hidden = !(R && R.all);
+    if (box.hidden) return;
+    const way = S.rankWay || "send", area = S.rankArea || "l48";
+    const V = R[area], d = V[way], fast = R.fast_days, l48 = area === "l48";
     const row = ([z, name, days, share]) => `<li><button type="button" data-z="${z}">
         <span class="rz">${z}xx</span><span class="rn">${esc(name)}</span>
         <span class="rd">${days.toFixed(2)} days<small>${Math.round(share)}% in ${fast} days</small></span></button></li>`;
-    const far = d.slow[0];
+    const seg = (key, cur, opts, label) => `<div class="seg" role="radiogroup" aria-label="${label}">${
+      opts.map(([v, t]) => `<button type="button" role="radio" data-${key}="${v}" aria-checked="${cur === v}">${t}</button>`).join("")}</div>`;
     box.innerHTML = `<h3>Fastest and slowest ZIP prefixes</h3>
-      <div class="seg" role="radiogroup" aria-label="Direction">
-        <button type="button" role="radio" data-w="send" aria-checked="${way === "send"}">Mailing from</button>
-        <button type="button" role="radio" data-w="recv" aria-checked="${way === "recv"}">Receiving at</button>
-      </div>
-      <p class="muted">${esc(R.label)}: average USPS days ${way === "send" ? "to" : "from"} every ZIP code in the country.
-        National average ${R.national.toFixed(2)} days.</p>
+      ${seg("w", way, [["send", "Mailing from"], ["recv", "Receiving at"]], "Direction")}
+      ${seg("a", area, [["l48", "Lower 48"], ["all", "All U.S."]], "Area")}
+      <p class="muted">${esc(R.label)}: average USPS days ${way === "send" ? "to" : "from"} every ZIP code
+        ${l48 ? "in the lower 48 (Alaska, Hawaii and the territories left out at both ends)" : "in the country"}.
+        Average ${V.national.toFixed(2)} days.</p>
       <h4>Fastest</h4><ol>${d.fast.map(row).join("")}</ol>
-      <h4>Slowest in the lower 48</h4><ol>${d.slow48.map(row).join("")}</ol>
-      <p class="muted">Alaska, Hawaii and the territories are slowest overall${far ? ` (up to ${far[2].toFixed(1)} days)` : ""}.
-        Click a row to start from there.</p>`;
-    box.querySelectorAll(".seg button").forEach(b => b.onclick = () => { S.rankWay = b.dataset.w; rankPanel(); });
+      <h4>Slowest</h4><ol>${d.slow.map(row).join("")}</ol>
+      <p class="muted">Click a row to start from there.</p>`;
+    box.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { S.rankWay = b.dataset.w; rankPanel(); });
+    box.querySelectorAll("[data-a]").forEach(b => b.onclick = () => { S.rankArea = b.dataset.a; rankPanel(); });
     box.querySelectorAll("li button").forEach(b => b.onclick = () => {
       const f = S.feats.find(f => S.zip3[f.i].z === b.dataset.z);
       if (f) { if (S.pinned) setDest(null); pinZip(f, true); }

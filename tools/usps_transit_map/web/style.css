@@ -275,7 +275,7 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .rank h3 { font-size: 14px; margin: 0 0 6px; color: var(--ink); }
 .rank h4 { font-size: 12px; margin: 10px 0 2px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
 .rank p { margin: 6px 0 0; font-size: 12px; }
-.rank .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+.rank .seg { display: inline-flex; margin: 0 4px 4px 0; border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
 .rank .seg button { border: 0; background: none; padding: 3px 9px; border-radius: 6px; cursor: pointer; color: var(--ink-2); font: inherit; }
 .rank .seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
 .rank ol { list-style: none; margin: 0; padding: 0; }
