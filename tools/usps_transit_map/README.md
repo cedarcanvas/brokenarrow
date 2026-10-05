@@ -27,6 +27,13 @@ it, then hover other ZIPs to read exact days.
   each ZIP. USPS doesn't publish which plant serves which ZIP, so this is the
   closest one, not necessarily the one your mail goes through. A checkbox
   under the legend hides them.
+- **Network view:** the "Network" switch (bottom left of the map) groups ZIP
+  prefixes whose First-Class days to and from everywhere are identical, most
+  likely the area one processing plant serves, and draws each group as a
+  dot. Hover a ZIP to see lines to every other plant area, colored by days;
+  with nothing selected, lines join the areas with the fastest link. It is
+  inferred from the published targets, not real truck routes.
+  `build/probe_network.py` prints how cleanly the groups form in each build.
 - **Side panel:** on-time meters at the top, then the hover/trip readout
   (it replaces the floating tooltip), then the legend with a distribution bar
   per class. Hover a legend row to spotlight those ZIPs.
