@@ -519,7 +519,7 @@
       bucket: BUCKETS.map(b => g(b.v)),
       bg: g("--map-bg"), land: g("--land"), ink: g("--ink"), ink2: g("--ink-2"), muted: g("--muted"),
       zip3: g("--line-zip3"), zcta: g("--line-zcta"), state: g("--line-state"), halo: g("--halo"),
-      hair: g("--hair"), dest: g("--dest"), hub: g("--hub"),
+      hair: g("--hair"), dest: g("--dest"), hub: g("--hub"), plant: g("--plant"),
       empty: g("--empty"), emptyLine: g("--empty-line"), stateHalo: g("--line-state-halo"),
     };
   }
@@ -585,9 +585,10 @@
 
     // Fills: one per ZIP prefix
     const row = S.rowCache || (S.rowCache = currentRow());
+    const trip = !isNet() && S.pinned && S.dest ? tripAreas() : null;
     for (let i = 0; i < S.N; i++) {
       if (!S.zip3Count[i]) continue;
-      const dim = row && S.focus != null && bkt(row[i]) !== S.focus;
+      const dim = row && ((S.focus != null && bkt(row[i]) !== S.focus) || (trip && !trip.has(i)));
       // Spotlight: fade other groups over a solid base, so the "no ZIP code"
       // hatching underneath never shows through.
       if (dim) { ctx.fillStyle = C.land; ctx.fill(S.zip3Paths[i], "evenodd"); ctx.globalAlpha = 0.15; }
@@ -611,6 +612,14 @@
       if (isNet() && S.net) outline(nodeOutline(S.net.nodeOf[S.origin]), 3, 1.6);
       else outline(prefixOutline(S.origin), 2.6, 1.3);
     }
+    if (!isNet()) {
+      // Mail-plant service areas in bright red: the origin's, and the destination's.
+      const t = target();
+      for (const f of [S.originZip, t]) {
+        const a = f && areaOf(f.i);
+        if (a) outline(nodeOutline(a.k, a.net), 4.6, 2.4, false, C.plant);
+      }
+    }
     if (S.originZip && S.pinned) outline(S.originZip.path, 2.2, 1, true);
     if (S.hover && S.hover !== S.originZip && S.hover !== S.dest) outline(S.hover.path, 2, 1);
     if (S.dest) outline(S.dest.path, 3, 1.8, false, C.dest);
@@ -619,6 +628,7 @@
     ctx.setTransform(d, 0, 0, d, 0, 0);
     if (isNet()) drawNetwork();
     drawPrefixes(drawCities(isNet() ? [] : drawHubs()));
+    if (!isNet() && S.pinned && S.dest) drawRoute(S.originZip, S.dest);
     if (S.dest) {
       const [[x0, y0], [x1, y1]] = S.dest.bbox;
       const [mx, my] = toScreen((x0 + x1) / 2, (y0 + y1) / 2);
@@ -678,10 +688,10 @@
   }
 
   // Outer edge of one plant area (cached).
-  function nodeOutline(k) {
-    const O = S.net.outlines;
+  function nodeOutline(k, net = S.net) {
+    const O = net.outlines;
     if (!O.has(k)) {
-      const nd = S.net.nodes[k], geoms = nd.members.flatMap(i => S.geomsByI[i]), out = new Path2D();
+      const nd = net.nodes[k], geoms = nd.members.flatMap(i => S.geomsByI[i]), out = new Path2D();
       if (geoms.length) {
         const m = topojson.mesh(S.topo, { type: "GeometryCollection", geometries: geoms }, (a, b) => a === b);
         d3.geoPath(S.projs[nd.p]).context(out)(m);
@@ -689,6 +699,86 @@
       O.set(k, out);
     }
     return O.get(k);
+  }
+
+  // The mail-plant service area a prefix belongs to: the official USPS plant
+  // (labeling list L005) when loaded, else the area inferred from delivery days.
+  function areaOf(i) {
+    let net = null;
+    if (S.sort) net = S.nets.usps || (S.nets.usps = buildNetwork("usps"));
+    else if (S.days.fcm) net = S.nets.net || (S.nets.net = buildNetwork("net"));
+    if (!net || net.nodeOf[i] < 0) return null;
+    return { net, k: net.nodeOf[i] };
+  }
+  function tripAreas() {
+    const set = new Set();
+    for (const f of [S.originZip, S.dest]) {
+      const a = f && areaOf(f.i);
+      if (a) a.net.nodes[a.k].members.forEach(i => set.add(i)); else if (f) set.add(f.i);
+    }
+    return set;
+  }
+
+  // Best guess at the path a piece takes between two ZIPs, from the USPS
+  // labeling lists. Letters and flats: origin plant -> destination's regional
+  // center (when it differs) -> destination plant. Packages: origin plant ->
+  // package hub(s) -> destination plant. Returns [{name, label, x, y}] in map units.
+  function routeStops(a, t) {
+    const center = (f) => [(f.bbox[0][0] + f.bbox[1][0]) / 2, (f.bbox[0][1] + f.bbox[1][1]) / 2];
+    const [ax, ay] = center(a), [tx, ty] = center(t);
+    const stops = [{ label: a.z, x: ax, y: ay, end: true }];
+    const ca = chainOf(a.i), ct = chainOf(t.i);
+    if (ca && ct) {
+      const pkg = S.cls === "ga" || S.cls === "pm";
+      const via = pkg ? [ca[0], ca[2], ct[2], ct[0]] : [ca[0], ca[1] !== ct[1] ? ct[1] : null, ct[0]];
+      let last = null;
+      for (const f of via) {
+        if (!f || f === last || f.x == null) continue;
+        last = f;
+        stops.push({ label: `${f.name} ${f.level === "SCF" ? "plant" : f.level === "ADC" ? "regional center" : "package hub"}`, x: f.x, y: f.y, f });
+      }
+    }
+    stops.push({ label: t.z, x: tx, y: ty, end: true });
+    return { stops, guessed: !(ca && ct) };
+  }
+  function routeText(a, t) {
+    const { stops, guessed } = routeStops(a, t);
+    return guessed ? "" : stops.map(s => s.label).join(" → ");
+  }
+
+  function drawRoute(a, t) {
+    const C = S.colors, { stops } = routeStops(a, t);
+    const pts = stops.map(s => ({ ...s, sx: toScreen(s.x, s.y)[0], sy: toScreen(s.x, s.y)[1] }));
+    ctx.save();
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath(); pts.forEach((q, j) => (j ? ctx.lineTo(q.sx, q.sy) : ctx.moveTo(q.sx, q.sy)));
+    ctx.lineWidth = 6.5; ctx.strokeStyle = C.halo; ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = C.dest; ctx.stroke();
+    // Arrowheads halfway along each leg.
+    for (let j = 1; j < pts.length; j++) {
+      const p0 = pts[j - 1], p1 = pts[j], dx = p1.sx - p0.sx, dy = p1.sy - p0.sy, L = Math.hypot(dx, dy);
+      if (L < 18) continue;
+      const ux = dx / L, uy = dy / L, mx = p0.sx + dx / 2, my = p0.sy + dy / 2;
+      ctx.beginPath(); ctx.moveTo(mx + ux * 6, my + uy * 6);
+      ctx.lineTo(mx - ux * 5 - uy * 5, my - uy * 5 + ux * 5); ctx.lineTo(mx - ux * 5 + uy * 5, my - uy * 5 - ux * 5); ctx.closePath();
+      ctx.fillStyle = C.dest; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = C.halo; ctx.stroke();
+    }
+    ctx.font = "600 11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+    ctx.textBaseline = "middle";
+    const used = [];
+    pts.forEach((q, j) => {
+      ctx.beginPath();
+      if (q.end) ctx.arc(q.sx, q.sy, 5.5, 0, 2 * Math.PI); else ctx.rect(q.sx - 5, q.sy - 5, 10, 10);
+      ctx.fillStyle = q.end ? C.dest : C.plant; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = C.halo; ctx.stroke();
+      if (q.end) return;
+      // Stops at the same spot share one label line each, stacked.
+      const near = used.filter(u => Math.hypot(u[0] - q.sx, u[1] - q.sy) < 14).length;
+      used.push([q.sx, q.sy]);
+      const ty = q.sy + near * 14;
+      ctx.lineWidth = 3.5; ctx.strokeStyle = C.halo; ctx.strokeText(q.label, q.sx + 9, ty);
+      ctx.fillStyle = C.ink; ctx.fillText(q.label, q.sx + 9, ty);
+    });
+    ctx.restore();
   }
 
   // Nearest processing plant to a plant area, for its name.
@@ -943,7 +1033,7 @@
   }
 
   // The current destination being compared: the hovered ZIP while pinned, else the typed To ZIP.
-  const target = () => (S.pinned && S.originZip ? (S.hover && S.hover !== S.originZip ? S.hover : S.dest) : null);
+  const target = () => (S.pinned && S.originZip ? (S.dest || (S.hover && S.hover !== S.originZip ? S.hover : null)) : null);
 
   function perfPanel() {
     const box = $("perf");
@@ -1083,13 +1173,14 @@
     if (!S.pinned) {
       box.innerHTML = `<span class="muted cap">From</span>
         <div class="route">${a.z} <span class="city">${esc(cityOf(a))}</span></div>
-        <p class="muted">Click to pin this ZIP, then hover anywhere to compare.</p>`;
+        <p class="muted">Click to make this the origin, then click a second ZIP for the destination.
+          The red outline is the area its mail plant serves.</p>`;
       return;
     }
     if (!t) {
       box.innerHTML = `<span class="muted cap">From</span>
         <div class="route">${a.z} <span class="city">${esc(cityOf(a))}</span></div>
-        <p class="muted">Hover a ZIP, or type a To ZIP or city above.</p>`;
+        <p class="muted">Click a second ZIP for the destination (hover to preview), or type one above.</p>`;
       return;
     }
     const d = S.days[S.cls] ? S.days[S.cls][a.i * S.N + t.i] : 0;
@@ -1106,7 +1197,8 @@
       <span class="muted cap">${isTrip ? "Trip" : "Hovered"} · ${esc(label)}</span>
       <div class="route">${a.z} → <span class="to">${t.z}</span></div>
       <div class="cities">${esc(cityOf(a))} → ${esc(cityOf(t))}</div>
-      ${nearestHub(a) && nearestHub(t) ? `<div class="plants"><span class="hubmark"></span>Nearest plants: ${esc(nearestHub(a).h.name)} → ${esc(nearestHub(t).h.name)}</div>` : ""}
+      ${routeText(a, t) ? `<div class="plants"><span class="hubmark"></span>Likely route: ${esc(routeText(a, t))}</div>`
+        : nearestHub(a) && nearestHub(t) ? `<div class="plants"><span class="hubmark"></span>Nearest plants: ${esc(nearestHub(a).h.name)} → ${esc(nearestHub(t).h.name)}</div>` : ""}
       <div class="hero"><span class="sw" style="background:${sw}"></span>${esc(value)}</div>
       <div class="muted">${esc(cap)}${S.mailDay == null && d ? ` · pick “Mailed on” for the weekday` : ""}</div>`;
     if (isTrip) $("clearTrip").onclick = () => setDest(null);
@@ -1119,7 +1211,7 @@
     const o = S.originZip;
     const when = S.mailDay == null ? "" : `, mailed on a ${WEEKDAY_NAMES[S.mailDay]}`;
     $("status").textContent = o
-      ? `${c.label}${when} from ${o.z} (${S.zip3[o.i].s}). ${S.pinned ? "Pinned. Hover other ZIPs to see days." : "Click to pin."}`
+      ? `${c.label}${when} from ${o.z} (${S.zip3[o.i].s}). ${!S.pinned ? "Click to set the origin." : S.dest ? `Trip to ${S.dest.z}. Click any ZIP to start a new trip, or the origin to clear.` : "Origin set. Click a second ZIP for the destination."}`
       : `${S.meta.n_zcta.toLocaleString()} ZIP codes in ${S.N} prefixes. Hover over the map to choose an origin.`;
   }
 
@@ -1203,8 +1295,10 @@
     onMove(ev);
     const f = S.hover;
     if (!f) return;
-    if (S.pinned && S.originZip === f) unpin();
-    else if (!S.pinned || ev.pointerType === "mouse") pinZip(f);
+    if (!S.pinned) pinZip(f);
+    else if (f === S.originZip) unpin();
+    else if (!S.dest) setDest(f);
+    else { setDest(null); pinZip(f); }
     showTip();
   });
   $("unpin").addEventListener("click", unpin);
@@ -1264,7 +1358,7 @@
   function setDest(f, zoom) {
     S.dest = f || null;
     $("toZip").value = f ? f.z : "";
-    writeHash(); legend(); draw();
+    writeHash(); legend(); draw(); status();
     if (zoom && f && S.originZip) zoomToPair(S.originZip, f);
   }
 
