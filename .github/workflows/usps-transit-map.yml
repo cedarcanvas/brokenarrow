@@ -107,6 +107,10 @@ jobs:
         continue-on-error: true
         run: python build/fetch_hubs.py
 
+      - name: Add USPS sorting chain from labeling lists (optional)
+        continue-on-error: true
+        run: python build/read_labeling.py
+
       - name: Rank fastest and slowest ZIP prefixes (optional)
         continue-on-error: true
         run: python build/rank_zips.py
