@@ -71,6 +71,71 @@ def in_effect(r, today):
     return (a is None or a <= today) and (b is None or today <= b)
 
 
+def norm_city(s):
+    s = str(s).lower().replace("saint ", "st ").replace("st. ", "st ").replace("fort ", "ft ")
+    return re.sub(r"[^a-z0-9]", "", s)
+
+
+def place(facilities, chain, zip3):
+    """Put each facility where it really is, not at the middle of its ZIP prefix.
+
+    In order of preference:
+      1. the plant / hub of the same city and state in USPS's facility file
+         (web/data/hubs.json, from fetch_hubs.py), which sits on its own ZIP
+      2. the middle of the ZIP codes whose post office has that city name
+         (web/data/zipnames.json + Census ZIP shapes)
+      3. the facility's own 5-digit ZIP, if it has a map shape
+      4. the middle of its 3-digit ZIP prefix, or of the prefixes it serves
+    """
+    plants = {}
+    hf = DATA / "hubs.json"
+    if hf.exists():
+        for name, kind, city, st, lon, lat in json.loads(hf.read_text())["h"]:
+            bare = re.sub(r"\s+(mail plant|p&dc|p&df|ndc|rdc|scf|pdc|pdf)$", "", name, flags=re.I)
+            for key in (norm_city(city), norm_city(bare)):
+                plants.setdefault((key, st, kind), (lon, lat))
+    pts, city_pts = {}, defaultdict(list)
+    zn = DATA / "zipnames.json"
+    shapes = APP / "raw/census/cb_2020_us_zcta520_500k.zip"
+    if not shapes.exists():
+        shapes = APP / "raw/demo/demo_zcta.gpkg"
+    if shapes.exists():
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            from fetch_hubs import zip_points
+            pts = zip_points(shapes)
+        except Exception as e:  # keep going with what we have
+            print(f"  ! could not read ZIP shapes: {e}")
+    if zn.exists() and pts:
+        names = json.loads(zn.read_text())
+        for z, idx in names["z"].items():
+            c, st = names["c"][idx]
+            if z in pts:
+                city_pts[(norm_city(c), st)].append(pts[z])
+
+    how = Counter()
+    for k, f in enumerate(facilities):
+        level, name, st, z = f[:4]
+        key, kind = norm_city(name), ("N" if level in ("NDC", "RPDC") else "P")
+        got, src = plants.get((key, st, kind)) or plants.get((key, st, "N" if kind == "P" else "P")), "facility file"
+        if not got and city_pts.get((key, st)):
+            ps = sorted(city_pts[(key, st)])
+            got, src = (ps[len(ps) // 2][0], sorted(p[1] for p in ps)[len(ps) // 2]), "city ZIP codes"
+        if not got and len(z) == 5 and z in pts:
+            got, src = pts[z], "own ZIP"
+        if not got and zip3.get(z[:3], {}).get("c"):
+            got, src = zip3[z[:3]]["c"], "ZIP prefix middle"
+        if not got:
+            served = [zip3[p]["c"] for p, c in chain.items() if k in c and zip3.get(p, {}).get("c")]
+            if served:
+                got = (sum(p[0] for p in served) / len(served), sum(p[1] for p in served) / len(served))
+                src = "area served"
+        if got:
+            f[4], f[5] = round(got[0], 4), round(got[1], 4)
+            how[src] += 1
+    print(f"  facility locations from: {dict(how)}")
+
+
 def main():
     if not RAW.exists():
         print("No raw/labeling/ folder; skipping the USPS sorting chain.")
@@ -88,9 +153,8 @@ def main():
     def facility(level, name, st, z):
         key = (level, name, st, z)
         if key not in index:
-            c = zip3.get(z[:3], {}).get("c")
             index[key] = len(facilities)
-            facilities.append([level, tidy(name), st, z, *(c or [None, None])])
+            facilities.append([level, tidy(name), st, z, None, None])
         return index[key]
 
     chain = defaultdict(lambda: [-1, -1, -1])
@@ -121,14 +185,7 @@ def main():
                                if re.search(r"_(\d{4})(\d{2})(\d{2})_", n)), None)
     date = f"{MONTHS[int(m[2]) - 1]} {int(m[3])}, {m[1]}" if m else ""
 
-    # A facility on a ZIP prefix with no map shape (e.g. 192xx, Philadelphia NDC)
-    # goes to the middle of the prefixes it serves instead.
-    for k, f in enumerate(facilities):
-        if f[4] is None:
-            pts = [zip3[z]["c"] for z, c in chain.items() if k in c and zip3.get(z, {}).get("c")]
-            if pts:
-                f[4] = round(sum(p[0] for p in pts) / len(pts), 3)
-                f[5] = round(sum(p[1] for p in pts) / len(pts), 3)
+    place(facilities, chain, zip3)
     missing = [f"{f[1]} {f[0]}" for f in facilities if f[4] is None]
     if missing:
         print(f"  ! no location for: {missing}")
