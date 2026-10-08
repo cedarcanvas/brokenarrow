@@ -157,6 +157,16 @@ def frame_for(body: dict, stretch: dict | None) -> dict:
 PREVIEW_TOP = {"ft": 500, "m": 150}
 
 
+def parse_cmap(raw, default: str = "mako") -> str:
+    """A colour ramp name the pipeline can resolve (built-in, qgis:, file: or custom:)."""
+    name = str(raw or default).strip()[:400]
+    try:
+        pipeline.ramps.get_cmap(name)
+    except ValueError as exc:
+        abort(400, str(exc))
+    return name
+
+
 def parse_ramp(src) -> dict:
     """Colour ramp options from query args or a JSON body, in pipeline.ramp()'s terms."""
     style = str(src.get("ramp_style", "smooth"))
@@ -219,7 +229,7 @@ def ramp_preview():
     """Legend for a colour ramp, so the page can preview it before running."""
     opts = parse_ramp(request.args)
     try:
-        legend = pipeline.ramp(request.args.get("cmap", "mako"), opts["top"] or PREVIEW_TOP[opts["units"]],
+        legend = pipeline.ramp(parse_cmap(request.args.get("cmap")), opts["top"] or PREVIEW_TOP[opts["units"]],
                                opts["style"], opts["log"], opts["steps"], opts["units"], opts["first"],
                                opts["invert"])["legend"]
     except ValueError as exc:
@@ -227,6 +237,28 @@ def ramp_preview():
     legend["auto_top"] = opts["top"] is None
     legend["preview_top"] = PREVIEW_TOP[opts["units"]]
     return jsonify(legend)
+
+
+@app.get("/api/cmaps")
+def cmaps():
+    """Colour ramps for the picker: built-ins, imported QGIS XML files and the QGIS style library."""
+    return jsonify({"groups": pipeline.ramps.catalog(), "qgis_db": pipeline.ramps.qgis_style_db()})
+
+
+@app.post("/api/cmaps/import")
+def import_cmaps():
+    """Save an uploaded QGIS style XML (e.g. from hub.qgis.org) so its ramps appear in the picker."""
+    upload = request.files.get("file")
+    if not upload:
+        abort(400, "Choose a QGIS style .xml file.")
+    data = upload.read(5_000_001)
+    if len(data) > 5_000_000:
+        abort(400, "That file is over 5 MB; QGIS ramp files are much smaller.")
+    try:
+        added = pipeline.ramps.import_xml(upload.filename or "ramps.xml", data.decode("utf-8", errors="replace"))
+    except ValueError as exc:
+        abort(400, str(exc))
+    return jsonify({"added": added})
 
 
 @app.get("/api/pages")
@@ -268,7 +300,7 @@ def create_job():
     body = request.get_json(force=True)
     river = str(body.get("river", "")).strip()
     res = float(body.get("res", 10))
-    cmap = str(body.get("cmap", "mako"))
+    cmap = parse_cmap(body.get("cmap"))
     stretch = parse_stretch(body["stretch"]) if body.get("stretch") else None
     title = str(body.get("title") or river).strip()[:120]
     subtitle = str(body.get("subtitle", "River Relative Elevation Model")).strip()[:160]
@@ -320,7 +352,7 @@ def restyle_job(job_id):
     body = request.get_json(force=True)
     ramp_opts = parse_ramp(body)
     args = [sys.executable, "-u", os.path.join(HERE, "pipeline.py"), "restyle", "--run", out,
-            "--cmap", str(body.get("cmap", job.get("cmap", "mako"))), *ramp_cli_args(ramp_opts),
+            "--cmap", parse_cmap(body.get("cmap"), job.get("cmap", "mako")), *ramp_cli_args(ramp_opts),
             *label_cli_args(parse_labels(body))]
     for key in ("title", "subtitle"):
         if body.get(key) is not None:

@@ -30,6 +30,18 @@ Opens http://127.0.0.1:5057.
    - Box mode keeps north up and grows your box to the page's proportions.
 4. **Settings**: DEM resolution (1 / 3 / 10 / 30 m; each option shows its pixel count),
    color ramp, and how the colors step through the heights:
+   - **Color ramp**: the picker groups its ramps:
+     - curated seaborn, matplotlib and cmocean ramps;
+     - every ramp in your QGIS style library (newest QGIS profile, read only);
+     - QGIS ramps you import;
+     - **Custom colors…**: 2–12 color pickers, with the first color at the river and the
+       last at the top of the ramp.
+
+     To import, download a ramp style from
+     [QGIS Hub](https://hub.qgis.org/styles/types/Color%20Ramp/), or export ramps from the
+     QGIS Style Manager, then click *Import QGIS ramp (.xml)…*. The file is saved to
+     `tools/rem_app/ramps/` (gitignored). Gradient, preset and ColorBrewer ramps work;
+     discrete gradients keep their hard edges. cpt-city and random ramps aren't supported.
    - **Smooth / Stepped**: a continuous gradient, or distinct color bands (4–24 steps).
      Each band gets an evenly spaced color from the ramp, so thin bands near the river
      still look clearly different.
@@ -125,6 +137,9 @@ conda run -n rem_env python tools/rem_app/pipeline.py run --start -106.150 38.87
 # recolor an existing run without downloading again; options left out keep the run's values
 conda run -n rem_env python tools/rem_app/pipeline.py restyle --run river_rem_runs/<run> \
     --cmap rocket --first 3 --invert --labels auto --label-scope all   # --no-places to drop landform names
+
+# other ramps: a QGIS style-library ramp, an imported XML ramp, or custom stops (river first)
+    --cmap qgis:Turbo    --cmap "file:Elevation Ramp"    --cmap custom:0b1d3a-2a6f97-8fc1d4-f4f1de
 ```
 
 ## Notes

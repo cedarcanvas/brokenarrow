@@ -3,6 +3,7 @@
 
 # RiverREM: generated rasters and caches (regenerate with tools/river_rem.sh)
 river_rem_*/
+tools/rem_app/ramps/
 .osm_cache/
 .cache/
 *_utm13.tif

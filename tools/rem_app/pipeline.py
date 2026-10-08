@@ -37,6 +37,7 @@ from shapely.geometry import LineString, box, shape
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import print_spec  # noqa: E402  (shared with the QGIS layout script)
+import ramps  # noqa: E402
 
 NHD_FLOWLINES = "https://hydro.nationalmap.gov/arcgis/rest/services/NHDPlus_HR/MapServer/3/query"
 OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.openstreetmap.fr/api/interpreter"]
@@ -701,13 +702,11 @@ def ramp(cmap: str, top: float, style: str = "smooth", log: bool = True, steps: 
     Stepped ramps get one evenly spaced colour per class, so thin classes stay distinct.
     Heights above the top get the last colour.
     """
-    from riverrem.RasterViz import RasterViz
-
     if style not in RAMP_STYLES:
         raise ValueError(f"ramp style must be one of {RAMP_STYLES}")
     if units not in UNITS:
         raise ValueError(f"units must be one of {tuple(UNITS)}")
-    base_cm = RasterViz._get_cm_mpl(cmap)
+    base_cm = ramps.get_cmap(cmap)
     # invert=True runs the colormap backwards (river gets the far end); works for any colormap
     cm = (lambda k: base_cm(254 - k)) if invert else base_cm
     u = UNITS[units]
@@ -1068,7 +1067,7 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
         source = manifest.get("centerline_source", "NHD")
         data = "USGS NHD HighRes" if source == "NHD" else "© OpenStreetMap contributors"
         slug = "".join(c if c.isalnum() else "-" for c in manifest["river"].lower()).strip("-")
-        style = (f"{''.join(c if c.isalnum() else '-' for c in cmap)}{'-inverted' if opts['invert'] else ''}"
+        style = (f"{ramps.slug(cmap)}{'-inverted' if opts['invert'] else ''}"
                  f"-{opts['style']}")
         ink = label_ink(labels["color"], legend)
         spec_labels = None
@@ -1222,7 +1221,7 @@ def restyle(out_dir: str, cmap: str | None = None, ramp_opts: dict | None = None
 def add_ramp_args(sp, keep: bool = False) -> None:
     """Colour options. With keep=True (restyle) every default is None, meaning "keep the run's value"."""
     d = (lambda v: None) if keep else (lambda v: v)
-    sp.add_argument("--cmap", default=d("mako"), help="matplotlib / seaborn / cmocean colormap")
+    sp.add_argument("--cmap", default=d("mako"), help="matplotlib / seaborn / cmocean colormap, qgis:<name>, file:<name> or custom:<hex>-<hex>-...")
     sp.add_argument("--ramp", default=d("smooth"), choices=RAMP_STYLES, help="continuous ramp or distinct steps")
     sp.add_argument("--spacing", default=d("log"), choices=("log", "linear"),
                     help="log: finer steps near the stream (default); linear: even steps")
