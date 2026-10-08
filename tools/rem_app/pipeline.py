@@ -32,7 +32,8 @@ import geopandas as gpd
 import rasterio
 from rasterio.merge import merge
 from rasterio.warp import transform_bounds
-from shapely.geometry import LineString, box
+import shapely
+from shapely.geometry import LineString, box, shape
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import print_spec  # noqa: E402  (shared with the QGIS layout script)
@@ -211,6 +212,63 @@ def named_lines(bbox: tuple) -> tuple[gpd.GeoDataFrame, str]:
         return gpd.GeoDataFrame({"gnis_name": []}, geometry=[], crs="EPSG:4326"), source
     gdf = gpd.GeoDataFrame.from_features(feats, crs="EPSG:4326")[["gnis_name", "geometry"]]
     return gdf[gdf.intersects(box(*bbox))], source
+
+
+def _cached_river(bbox: tuple, river: str) -> tuple[gpd.GeoDataFrame, str, float] | None:
+    """`river`'s lines from every cached query overlapping bbox (e.g. the one the stretch trace made).
+
+    Uses one source only (NHD preferred) so NHD and OSM copies of the same river don't double up.
+    Returns (gdf, source, share of bbox covered by those caches) or None.
+    """
+    w, s, e, n = bbox
+    by_source: dict[str, list] = {}
+    for name in os.listdir(CACHE_DIR) if os.path.isdir(CACHE_DIR) else []:
+        if name.startswith("gnis_") or not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(CACHE_DIR, name)) as f:
+                cached = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(cached, dict) or "features" not in cached:
+            continue
+        cw, cs, ce, cn = cached.get("bbox", (0, 0, 0, 0))
+        if ce <= w or cw >= e or cn <= s or cs >= n:
+            continue
+        feats = [f for f in cached["features"] if f.get("properties", {}).get("gnis_name") == river]
+        if feats:
+            by_source.setdefault(cached["source"], []).append((box(cw, cs, ce, cn), feats))
+    if not by_source:
+        return None
+    source = "NHD" if "NHD" in by_source else next(iter(by_source))
+    boxes, feats = zip(*by_source[source])
+    gdf = gpd.GeoDataFrame.from_features([f for fs in feats for f in fs], crs="EPSG:4326")[["gnis_name", "geometry"]]
+    gdf = gdf[~gdf.geometry.to_wkb().duplicated()]
+    frame_box = box(*bbox)
+    covered = shapely.union_all(boxes).intersection(frame_box).area / frame_box.area
+    return gdf[gdf.intersects(frame_box)], source, covered
+
+
+def river_centerline(bbox: tuple, river: str, stretch: dict | None = None) -> tuple[gpd.GeoDataFrame, str]:
+    """Lines named `river` in bbox for RiverREM's centerline.
+
+    Stretch mode reuses the lines the trace already cached, so a run never re-queries NHD/OSM for a
+    river it just traced (a print frame can be 100 km across, and those services time out often).
+    """
+    if stretch:
+        hit = _cached_river(bbox, river)
+        if hit:
+            lines, source, covered = hit
+            log(f"  Reusing traced {source} lines ({covered:.0%} of the frame was fetched)")
+            return lines, source
+    try:
+        lines, source = named_lines(bbox)
+    except ServiceUnavailable:
+        if not stretch:
+            raise
+        log("  River services down; using the traced stretch alone as the centerline")
+        return gpd.GeoDataFrame({"gnis_name": [river]}, geometry=[shape(stretch)], crs="EPSG:4326"), "stretch"
+    return lines[lines["gnis_name"] == river], source
 
 
 def list_rivers(bbox: tuple) -> dict:
@@ -1033,8 +1091,8 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
         log(f"Frame: {print_spec.PAGE_LABELS[page]} {frame['orientation']}, 1:{frame['scale']:,}, "
             f"rotated {frame['rotation']:g}°, {frame['width_m'] / 1000:.1f} × {frame['height_m'] / 1000:.1f} km")
         log(f"Getting centerline for {river!r}")
-        lines, source = named_lines(bbox)
-        lines = lines[lines["gnis_name"] == river].clip(bbox)
+        lines, source = river_centerline(bbox, river, stretch)
+        lines = lines.clip(bbox)
         lines = lines[~lines.geometry.is_empty]
         if lines.empty:
             raise RuntimeError(f"No {source} river lines named {river!r} in this area.")
