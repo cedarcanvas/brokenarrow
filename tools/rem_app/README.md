@@ -140,6 +140,10 @@ conda run -n rem_env python tools/rem_app/pipeline.py restyle --run river_rem_ru
   falls back to OpenStreetMap. If both are down, it says so; click *Retry* or nudge a pin.
 - 3DEP times out on 4000 px tiles at 1 m, so DEMs are fetched as 2000 px tiles, and any
   tile the server still rejects is split into quarters and retried (down to 250 px).
+- 3DEP sometimes returns a NoData block inside a large tile that a smaller request for the
+  same area fills; this happened over Lake Mead in UTM 12N. After merging, the app
+  re-requests any holes in 500 px pieces, at most 60 requests. Areas with no 3DEP data at
+  all, such as ocean or Canada, stay empty.
 - 1 m lidar isn't available everywhere. Where it's missing, 3DEP resamples the best
   available data.
 - Runs are capped at 400 megapixels. A rotated frame needs a larger north-up DEM than its

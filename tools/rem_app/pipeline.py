@@ -517,6 +517,59 @@ def _fetch_tile(x0: float, y1: float, w: int, h: int, res_m: float, epsg: int, s
     return [path]
 
 
+VOID_TILE_PX = 500   # re-request voids in pieces this small
+VOID_MIN_PX = 16     # ignore specks (coastline / data-edge slivers)
+VOID_MAX_REQUESTS = 60   # areas with no 3DEP coverage (ocean, Canada) would otherwise mean hundreds
+
+
+def _fill_voids(arr, xmin: float, ymax: float, res_m: float, epsg: int, tile_dir: str) -> None:
+    """Re-request NoData holes in a merged DEM in small pieces, filling `arr` in place.
+
+    3DEP sometimes returns a NoData block inside a large export that a smaller request for the
+    same area fills (e.g. Lake Mead in a 2000 px, 60 km tile in UTM 12N). Areas with no 3DEP
+    coverage at all (ocean, outside the US) just stay NoData.
+    """
+    from scipy import ndimage
+
+    labels, n = ndimage.label(arr == NODATA)
+    if not n:
+        return
+    boxes = [(sl, int((labels[sl] == k).sum())) for k, sl in enumerate(ndimage.find_objects(labels), 1)]
+    boxes = [(sl, px) for sl, px in boxes if px >= VOID_MIN_PX]
+    if not boxes:
+        return
+    log(f"  {len(boxes)} NoData hole(s), {sum(px for _, px in boxes):,} px; re-requesting in smaller pieces")
+    budget = VOID_MAX_REQUESTS
+    for b, (sl, _) in enumerate(sorted(boxes, key=lambda t: -t[1])[:25]):
+        r0, r1 = max(sl[0].start - 2, 0), min(sl[0].stop + 2, arr.shape[0])
+        c0, c1 = max(sl[1].start - 2, 0), min(sl[1].stop + 2, arr.shape[1])
+        for r in range(r0, r1, VOID_TILE_PX):
+            for c in range(c0, c1, VOID_TILE_PX):
+                h, w = min(VOID_TILE_PX, r1 - r), min(VOID_TILE_PX, c1 - c)
+                if not (arr[r:r + h, c:c + w] == NODATA).any():
+                    continue
+                if budget <= 0:
+                    log(f"  hole re-request limit reached; {int((arr == NODATA).sum()):,} NoData px remain")
+                    return
+                budget -= 1
+                try:
+                    parts = _fetch_tile(xmin + c * res_m, ymax - r * res_m, w, h, res_m, epsg,
+                                        os.path.join(tile_dir, f"void_{b}_{r}_{c}"))
+                except Exception as exc:   # best effort: leave the hole rather than fail the run
+                    log(f"    hole re-request failed ({exc})")
+                    continue
+                for path in parts:   # several if the request was split into quarters
+                    with rasterio.open(path) as src:
+                        patch, t = src.read(1), src.transform
+                    pr, pc = round((ymax - t.f) / res_m), round((t.c - xmin) / res_m)
+                    view = arr[pr:pr + patch.shape[0], pc:pc + patch.shape[1]]
+                    patch = patch[:view.shape[0], :view.shape[1]]
+                    fill = (view == NODATA) & (patch > NODATA / 2)
+                    view[fill] = patch[fill]
+    left = int((arr == NODATA).sum())
+    log(f"  {left:,} NoData px remain" if left else "  holes filled")
+
+
 def fetch_dem(bbox: tuple, res_m: float, out_tif: str) -> str:
     """Download 3DEP elevation for bbox at res_m, in the bbox's UTM zone, tiling as needed."""
     epsg = bbox_epsg(bbox)
@@ -541,6 +594,7 @@ def fetch_dem(bbox: tuple, res_m: float, out_tif: str) -> str:
     srcs = [rasterio.open(p) for p in tiles]
     try:
         mosaic, transform = merge(srcs, bounds=(xmin, ymin, xmax, ymax), res=res_m, nodata=NODATA)
+        _fill_voids(mosaic[0], xmin, ymax, res_m, epsg, tile_dir)
         profile = {"driver": "GTiff", "height": mosaic.shape[1], "width": mosaic.shape[2], "count": 1,
                    "dtype": "float32", "crs": f"EPSG:{epsg}", "transform": transform, "nodata": NODATA,
                    "compress": "deflate", "tiled": True, "BIGTIFF": "IF_SAFER"}
