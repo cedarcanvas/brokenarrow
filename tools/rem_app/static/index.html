@@ -65,6 +65,10 @@
   input[type=range] { width: 100%; }
   #map { height: 100vh; }
   #map.drawing { cursor: crosshair; }
+  button.small { padding: 3px 9px; font-size: 12px; }
+  #custom-stops { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+  #custom-stops input[type=color] { width: 34px; height: 28px; padding: 1px; border: 1px solid var(--line);
+         border-radius: 5px; background: var(--panel); cursor: pointer; }
   .seg { display: flex; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
   .seg button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--muted); }
   .seg button.on { background: var(--bg); color: var(--ink); font-weight: 600; }
@@ -175,10 +179,23 @@
     <div id="res-warn" class="warn" hidden></div>
     <label for="cmap">Color ramp</label>
     <select id="cmap">
-      <option>mako</option><option>mako_r</option><option>topo</option><option>cmo.deep</option>
-      <option>cmo.tempo</option><option>cmo.ice</option><option>viridis</option><option>Spectral_r</option>
-      <option>rocket</option><option>Blues_r</option>
+      <option>mako</option>
     </select>
+    <div id="custom-ramp" hidden>
+      <div id="custom-stops"></div>
+      <div class="row" style="margin-top:6px">
+        <button id="custom-add" type="button" class="small" title="Add a colour">+ Color</button>
+        <button id="custom-remove" type="button" class="small" title="Remove the last colour">− Color</button>
+        <button id="custom-reverse" type="button" class="small" title="Reverse the order">Reverse</button>
+      </div>
+      <div class="muted" style="margin-top:4px">First color is at the river, last at the top of the ramp.</div>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button id="cmap-import" type="button" class="small">Import QGIS ramp (.xml)…</button>
+      <a class="muted" href="https://hub.qgis.org/styles/types/Color%20Ramp/" target="_blank" rel="noopener">Browse QGIS Hub</a>
+      <input id="cmap-file" type="file" accept=".xml,text/xml" hidden>
+    </div>
+    <div id="cmap-msg" class="muted"></div>
     <label>Color steps</label>
     <div class="seg" role="tablist">
       <button id="ramp-smooth" class="on" role="tab">Smooth</button>
@@ -536,7 +553,7 @@ function selectRiver(name) {
 // ---------- colour ramp
 const ramp = { style: "smooth", seq: 0, timer: null };
 function rampParams() {
-  return { cmap: $("cmap").value, ramp_style: ramp.style, ramp_log: $("ramp-log").checked ? 1 : 0,
+  return { cmap: cmapValue(), ramp_style: ramp.style, ramp_log: $("ramp-log").checked ? 1 : 0,
            ramp_steps: +$("ramp-steps").value, ramp_units: $("ramp-units").value,
            ramp_top: $("ramp-top").value.trim() || "auto",
            ramp_first: (ramp.style === "stepped" && $("ramp-first").value.trim()) || "auto",
@@ -555,7 +572,7 @@ function setRampStyle(style) {
 }
 $("ramp-smooth").onclick = () => setRampStyle("smooth");
 $("ramp-stepped").onclick = () => setRampStyle("stepped");
-for (const id of ["ramp-log", "ramp-invert", "ramp-steps", "cmap"]) $(id).addEventListener("change", refreshRamp);
+for (const id of ["ramp-log", "ramp-invert", "ramp-steps"]) $(id).addEventListener("change", refreshRamp);
 $("ramp-units").addEventListener("change", () => {
   for (const s of document.querySelectorAll(".unit")) s.textContent = $("ramp-units").value;
   refreshRamp();
@@ -563,6 +580,78 @@ $("ramp-units").addEventListener("change", () => {
 for (const id of ["ramp-top", "ramp-first"]) {
   $(id).oninput = () => { clearTimeout(ramp.timer); ramp.timer = setTimeout(refreshRamp, 350); };
 }
+
+// ---------- colour ramp picker: built-ins, QGIS ramps, imported XML, custom colours
+const CUSTOM_DEFAULT = ["#0b1d3a", "#2a6f97", "#8fc1d4", "#f4f1de"];
+function customColors() { return [...$("custom-stops").querySelectorAll("input")].map((i) => i.value.slice(1)); }
+function cmapValue() {
+  return $("cmap").value === "custom" ? "custom:" + customColors().join("-") : $("cmap").value;
+}
+function setCustomColors(colors) {
+  const box = $("custom-stops"); box.innerHTML = "";
+  for (const c of colors) {
+    const inp = document.createElement("input");
+    inp.type = "color"; inp.value = c.startsWith("#") ? c : "#" + c;
+    inp.oninput = () => { clearTimeout(ramp.timer); ramp.timer = setTimeout(refreshRamp, 200); };
+    box.appendChild(inp);
+  }
+  $("custom-remove").disabled = colors.length <= 2;
+  $("custom-add").disabled = colors.length >= 12;
+}
+function cmapLabel(id) {
+  return !id ? "" : id.startsWith("custom:") ? "custom colors" : id.replace(/^(qgis|file):/, "");
+}
+function onCmapChange() {
+  $("custom-ramp").hidden = $("cmap").value !== "custom";
+  refreshRamp();
+}
+$("cmap").addEventListener("change", onCmapChange);
+$("custom-add").onclick = () => {
+  const c = customColors(); c.push(c[c.length - 1]); setCustomColors(c); refreshRamp();
+};
+$("custom-remove").onclick = () => { setCustomColors(customColors().slice(0, -1)); refreshRamp(); };
+$("custom-reverse").onclick = () => { setCustomColors(customColors().reverse()); refreshRamp(); };
+setCustomColors(CUSTOM_DEFAULT);
+
+// select a ramp by id; custom:hex-hex loads the colour stops, unknown names get their own option
+function selectCmap(id) {
+  const sel = $("cmap");
+  if (id.startsWith("custom:")) {
+    setCustomColors(id.slice(7).split("-")); sel.value = "custom";
+  } else {
+    if (![...sel.options].some((o) => o.value === id)) sel.add(new Option(id, id), 0);
+    sel.value = id;
+  }
+  $("custom-ramp").hidden = sel.value !== "custom";
+}
+async function loadCmaps(select) {
+  const data = await api("/api/cmaps", {}, true);
+  if (!data) return;
+  const sel = $("cmap"), keep = select || cmapValue();
+  sel.innerHTML = "";
+  for (const g of data.groups) {
+    const og = document.createElement("optgroup"); og.label = g.group;
+    for (const r of g.ramps) og.appendChild(new Option(r.label, r.id));
+    sel.appendChild(og);
+  }
+  const og = document.createElement("optgroup"); og.label = "Your own";
+  og.appendChild(new Option("Custom colors…", "custom"));
+  sel.appendChild(og);
+  selectCmap(keep);
+  refreshRamp();
+}
+$("cmap-import").onclick = () => $("cmap-file").click();
+$("cmap-file").onchange = async () => {
+  const file = $("cmap-file").files[0];
+  if (!file) return;
+  const form = new FormData(); form.append("file", file);
+  const res = await api("/api/cmaps/import", { method: "POST", body: form }, true, true);
+  $("cmap-file").value = "";
+  const msg = $("cmap-msg");
+  if (res.error) { msg.innerHTML = `<span class="err"></span>`; msg.firstChild.textContent = res.error; return; }
+  msg.textContent = `Imported ${res.added.length} ramp${res.added.length === 1 ? "" : "s"} from ${file.name}.`;
+  await loadCmaps(res.added[0]);
+};
 
 async function refreshRamp() {
   const seq = ++ramp.seq;
@@ -633,7 +722,7 @@ function updateRunButton() {
 $("btn-run").onclick = async () => {
   $("run-msg").textContent = "";
   const res = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(Object.assign({ river: state.selected, res: +$("res").value, cmap: $("cmap").value },
+    body: JSON.stringify(Object.assign({ river: state.selected, res: +$("res").value, cmap: cmapValue() },
       state.mode === "stretch"
         ? { stretch: state.stretch }
         : { bbox: state.bbox },
@@ -681,7 +770,7 @@ function watchJob(id) {
 // load a run's colour settings into the controls, so Recolor starts from what that run used
 function applyRampSettings(job) {
   const r = job.ramp || {};
-  if (job.cmap && [...$("cmap").options].some((o) => o.value === job.cmap)) $("cmap").value = job.cmap;
+  if (job.cmap) selectCmap(job.cmap);
   $("ramp-log").checked = r.log !== false;
   $("ramp-invert").checked = !!r.invert;
   $("label-color").value = (job.labels && job.labels.color) || "auto";
@@ -719,7 +808,7 @@ function showResult(job, fit) {
   $("s-result").hidden = false;
   $("result-title").innerHTML = `<b></b> <span class="muted"></span>`;
   $("result-title").children[0].textContent = job.river;
-  $("result-title").children[1].textContent = `· ${job.res_m} m · ${job.cmap}` +
+  $("result-title").children[1].textContent = `· ${job.res_m} m · ${cmapLabel(job.cmap)}` +
     (job.scale ? ` · ${job.page} ${job.orientation} 1:${job.scale.toLocaleString()}` : "") +
     (job.centerline_source ? ` · ${job.centerline_source} centerline` : "");
   const f = job.files;
@@ -748,7 +837,7 @@ async function loadRuns() {
     const when = (j.started || j.id.slice(0, 15)).replace("T", " ").slice(0, 16);
     li.innerHTML = `<span><b></b><br><span class="muted"></span></span><span class="km status-${j.status}"></span>`;
     li.querySelector("b").textContent = j.river || j.id;
-    li.querySelector(".muted").textContent = `${when} · ${j.res_m ?? "?"} m · ${j.cmap ?? ""}`;
+    li.querySelector(".muted").textContent = `${when} · ${j.res_m ?? "?"} m · ${cmapLabel(j.cmap)}`;
     li.lastChild.textContent = j.status === "done" ? "✓" : j.status === "error" ? "failed" : "running";
     li.onclick = () => {
       if (j.status === "done") { showResult(j, true); applyRampSettings(j); return; }
@@ -781,7 +870,7 @@ async function api(url, opts = {}, quiet = false, returnError = false) {
   }
 }
 resetInfo();
-refreshRamp();
+loadCmaps("mako");
 api("/api/pages", {}, true).then((pages) => {
   for (const p of pages || []) $("page").add(new Option(p.label, p.id, false, p.id === "11x17"));
 });
