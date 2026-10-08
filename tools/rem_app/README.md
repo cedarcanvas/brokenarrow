@@ -132,7 +132,10 @@ conda run -n rem_env python tools/rem_app/pipeline.py restyle --run river_rem_ru
 - Setup: `mamba create -n rem_env -c conda-forge riverrem "osmnx=1.9.4" flask`, plus QGIS
   4.x in /Applications.
 - River lines are cached in `.osm_cache/rem_app/`. Any later request inside an area
-  already fetched reuses the cache.
+  already fetched reuses the cache. In stretch mode a run reuses the river lines the trace
+  fetched, without querying again for the larger print frame. Past the area the trace
+  fetched, RiverREM extrapolates the river surface. If nothing is cached and both services
+  are down, the run uses the traced stretch alone as the centerline.
 - The USGS NHD service often returns 502/504 errors or times out. When it does, the app
   falls back to OpenStreetMap. If both are down, it says so; click *Retry* or nudge a pin.
 - 3DEP times out on 4000 px tiles at 1 m, so DEMs are fetched as 2000 px tiles, and any
