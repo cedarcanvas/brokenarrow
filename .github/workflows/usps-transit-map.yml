@@ -15,9 +15,6 @@ on:
       - "tools/usps_transit_map/**"
       - "tools/maps_site/**"
       - ".github/workflows/usps-transit-map.yml"
-  schedule:
-    # Monthly refresh so new quarterly USPS data is picked up (07:17 UTC on the 3rd).
-    - cron: "17 7 3 * *"
   workflow_dispatch:
     inputs:
       demo:
