@@ -76,7 +76,9 @@ it, then hover other ZIPs to read exact days.
 
 ## Updating the data (automatic)
 
-The GitHub Action runs `build/fetch_usps.py` on every build and once a month.
+The GitHub Action runs `build/fetch_usps.py` on every build. There is no
+timed rebuild: to pick up new USPS data, run the workflow by hand
+(Actions tab → USPS delivery-days map → Run workflow) or push a change.
 It opens the PostalPro service-standards page
 (https://postalpro.usps.com/operations/service-standards), finds the download
 links, and keeps the newest **Combined Service Standard Directory** file for
