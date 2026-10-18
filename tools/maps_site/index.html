@@ -3,9 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ridgeline Maps · Interactive maps</title>
-<meta name="description" content="Interactive web maps by Ridgeline Maps.">
+<title>Interactive Maps · Ridgeline Maps</title>
+<meta name="description" content="Interactive web maps by Ridgeline Maps: Great Lakes lighthouses and shipwrecks, James Bond filming locations, and USPS delivery days.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:title" content="Interactive Maps · Ridgeline Maps">
+<meta property="og:description" content="Explorable maps from a cartography studio in Edwards, Colorado.">
+<meta property="og:image" content="https://maps.ridgelinemaps.com/previews/great-lakes.jpg">
+<meta property="og:url" content="https://maps.ridgelinemaps.com/">
+<meta name="twitter:card" content="summary_large_image">
 <script>
   // Old links to the delivery-days map (when it lived at the site root) carried
   // the view in the address, e.g. "#pm/80302/fri/10001". Send them to /usps/.
@@ -14,7 +19,7 @@
 <style>
   :root {
     --page: #f7f6f2; --surface: #ffffff; --ink: #0b0b0b; --ink-2: #5b6b7e;
-    --border: rgba(0, 0, 0, 0.10); --accent: #002868;
+    --border: rgba(0, 0, 0, 0.10); --accent: #002868; --cta: #F0C030; --cta-ink: #1a1a1a;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -33,42 +38,115 @@
     margin: 0; background: var(--page); color: var(--ink);
     font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
-  main { max-width: 860px; margin: 0 auto; padding: 48px 16px 64px; }
-  h1 { font-size: 30px; margin: 0; color: var(--accent); }
-  .sub { margin: 4px 0 32px; color: var(--ink-2); }
-  .maps { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px;
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-  .maps a {
-    display: block; height: 100%; padding: 18px 20px; border-radius: 12px; text-decoration: none;
-    background: var(--surface); border: 1px solid var(--border); color: var(--ink);
+  a { color: var(--accent); }
+  .top {
+    max-width: 1080px; margin: 0 auto; padding: 18px 16px 0;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px;
   }
-  .maps a:hover, .maps a:focus-visible { border-color: var(--accent); }
-  .maps h2 { font-size: 18px; margin: 0 0 6px; color: var(--accent); }
-  .maps p { margin: 0; color: var(--ink-2); font-size: 14px; }
-  footer { margin-top: 40px; font-size: 13px; color: var(--ink-2); }
+  .brand { font-weight: 700; font-size: 17px; color: var(--ink); text-decoration: none; }
+  .brand:hover, .brand:focus-visible { color: var(--accent); }
+  .top nav { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 14px; }
+  .top nav a { color: var(--ink-2); text-decoration: none; }
+  .top nav a:hover, .top nav a:focus-visible { color: var(--accent); text-decoration: underline; }
+  main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 64px; }
+  h1 { font-size: 32px; line-height: 1.15; margin: 0; color: var(--accent); }
+  .sub { margin: 8px 0 32px; color: var(--ink-2); max-width: 60ch; }
+  .maps { list-style: none; margin: 0; padding: 0; display: grid; gap: 20px;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .card {
+    position: relative; height: 100%; display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  }
+  .card:hover, .card:focus-within { border-color: var(--accent); }
+  .card img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; background: var(--border); }
+  .body { padding: 16px 20px 18px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .card h2 { font-size: 18px; line-height: 1.25; margin: 0; }
+  .card h2 a { color: var(--accent); text-decoration: none; }
+  /* The title link covers the whole card, so the picture is clickable too. */
+  .card h2 a::after { content: ""; position: absolute; inset: 0; }
+  .card p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  .actions { margin-top: auto; padding-top: 6px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 14px; }
+  .open { color: var(--ink); font-weight: 600; }
+  .buy {
+    position: relative; z-index: 1; /* sits above the card-wide link */
+    background: var(--cta); color: var(--cta-ink); font-weight: 600; text-decoration: none;
+    padding: 6px 12px; border-radius: 6px;
+  }
+  .buy:hover, .buy:focus-visible { filter: brightness(0.95); text-decoration: underline; }
+  .promo {
+    margin-top: 40px; padding: 22px 24px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between;
+  }
+  .promo h2 { font-size: 18px; margin: 0 0 4px; }
+  .promo p { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 56ch; }
+  .promo .links { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; font-size: 14px; }
+  .promo .buy { padding: 9px 16px; }
+  footer { margin-top: 32px; font-size: 13px; color: var(--ink-2); }
   footer a { color: var(--ink-2); }
 </style>
 </head>
 <body>
+<header class="top">
+  <a class="brand" href="https://ridgelinemaps.com">Ridgeline Maps</a>
+  <nav aria-label="Ridgeline Maps">
+    <a href="https://ridgelinemaps.com/store">Shop prints</a>
+    <a href="https://ridgelinemaps.com/maps">Portfolio</a>
+    <a href="https://ridgelinemaps.com/custom-maps">Custom maps</a>
+  </nav>
+</header>
 <main>
-  <h1>Ridgeline Maps</h1>
-  <p class="sub">Interactive maps</p>
+  <h1>Interactive maps</h1>
+  <p class="sub">Maps you can explore: zoom in, hover, and follow the stories behind the data. Made by Ridgeline Maps, a cartography studio in Edwards, Colorado.</p>
   <ul class="maps">
     <li>
-      <a href="usps/">
-        <h2>USPS Delivery Days</h2>
-        <p>Hover over any ZIP code to see how many days USPS takes to deliver letters and packages to
-          the rest of the country, how often it's on time, and where the mail plants are.</p>
-      </a>
+      <article class="card">
+        <img src="previews/great-lakes.jpg" alt="Night chart of the Great Lakes with lighthouses glowing along every shore" width="800" height="450" loading="lazy">
+        <div class="body">
+          <h2><a href="great-lakes/">Lighthouses &amp; Shipwrecks of the Great Lakes</a></h2>
+          <p>A night chart of 746 lighthouses and 920 shipwrecks from Duluth to Québec. Every light flashes its real
+            pattern; hover any light or wreck for its story.</p>
+          <div class="actions">
+            <span class="open">Open the map &rarr;</span>
+            <a class="buy" href="https://ridgelinemaps.com/store/great-lakes">Prints from $119</a>
+          </div>
+        </div>
+      </article>
     </li>
     <li>
-      <a href="great-lakes/">
-        <h2>Lighthouses &amp; Shipwrecks of the Great Lakes</h2>
-        <p>A night chart of 746 lighthouses and 920 shipwrecks from Duluth to Québec. Every light flashes its real
-          pattern; hover any light or wreck for its story.</p>
-      </a>
+      <article class="card">
+        <img src="previews/007-filming-atlas.jpg" alt="World map with colored dots marking James Bond filming locations" width="800" height="450" loading="lazy">
+        <div class="body">
+          <h2><a href="007-filming-atlas/">007 Filming Atlas</a></h2>
+          <p>Where every Bond film was actually shot, from Jamaica in 1962 to the Faroe Islands in 2021: 108 real-world
+            locations across 27 films. Pick a mission to trace its route.</p>
+          <div class="actions"><span class="open">Open the map &rarr;</span></div>
+        </div>
+      </article>
+    </li>
+    <li>
+      <article class="card">
+        <img src="previews/usps.jpg" alt="U.S. map shaded by how many days mail takes to arrive from Edwards, Colorado" width="800" height="450" loading="lazy">
+        <div class="body">
+          <h2><a href="usps/">USPS Delivery Days</a></h2>
+          <p>Hover over any ZIP code to see how many days USPS takes to deliver letters and packages to
+            the rest of the country, how often it's on time, and where the mail plants are.</p>
+          <div class="actions"><span class="open">Open the map &rarr;</span></div>
+        </div>
+      </article>
     </li>
   </ul>
+
+  <section class="promo" aria-label="Prints and custom maps">
+    <div>
+      <h2>Want one on your wall?</h2>
+      <p>Ridgeline Maps prints its charts as large-format wall maps, and makes custom maps for trails, events and places you love.</p>
+    </div>
+    <div class="links">
+      <a class="buy" href="https://ridgelinemaps.com/store">Shop map prints</a>
+      <a href="https://ridgelinemaps.com/custom-maps">Commission a custom map</a>
+    </div>
+  </section>
+
   <footer><a href="https://ridgelinemaps.com">ridgelinemaps.com</a></footer>
 </main>
 </body>
