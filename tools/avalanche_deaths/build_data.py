@@ -2,8 +2,10 @@
 """Turn the CAIC US avalanche accident spreadsheet into data for the map page.
 
 Reads the "Data" sheet of the Colorado Avalanche Information Center's accident
-workbook, tidies it, and writes it into the page between its
-<script id="accident-data"> tags, so the page stays one self-contained file.
+workbook, tidies it, links each avalanche to its accident report where one is
+published (raw/reports_caic.json and raw/reports_uac.json, from fetch_reports.py),
+and writes it into the page between its <script id="accident-data"> tags, so the
+page stays one self-contained file.
 
 Usage:
     build_data.py [workbook.xlsx] [page.html]
@@ -16,9 +18,12 @@ an updated workbook: put it in raw/ and run this again.
 import json
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
+
+from report_links import match
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_PAGE = HERE.parent / "maps_site" / "avalanche-deaths" / "index.html"
@@ -70,6 +75,34 @@ def tidy_text(value):
     return text or None
 
 
+def report_links(df, ordered):
+    """For each row (in page order), the accident reports published for it: [[source, url], ...]."""
+    rows = [{
+        "i": r.Index, "state": r.State.strip(), "date": r.Date.date(), "killed": int(r.Killed), "loc": str(r.Location),
+        "lat": r.lat if r.lat != 0 and r.lon != 0 else None, "lon": r.lon if r.lat != 0 and r.lon != 0 else None,
+        "desc": tidy_text(r.Description) or "",
+    } for r in df.itertuples()]
+    links = {r.Index: [] for r in df.itertuples()}
+    for source in ("caic", "uac"):
+        path = HERE / "raw" / f"reports_{source}.json"
+        if not path.exists():
+            print(f"No {path.name}; run fetch_reports.py to link {source.upper()} reports.", file=sys.stderr)
+            continue
+        reports = json.loads(path.read_text(encoding="utf-8"))
+        for r in reports:
+            r["date"] = date.fromisoformat(r["date"])
+            r.setdefault("words", [])
+            r.setdefault("inv", "")
+            r.setdefault("lat", None)
+            r.setdefault("lon", None)
+        url = {r["id"]: r["url"] for r in reports}
+        found = match([dict(row) for row in rows], reports)
+        for i, rid in found.items():
+            links[i].append([source, url[rid]])
+        print(f"Reports:   {len(found)} rows linked to {len(set(found.values()))} of {len(reports)} {source.upper()} reports")
+    return [links[i] or None for i in ordered]
+
+
 def main() -> int:
     if len(sys.argv) > 3:
         print(__doc__, file=sys.stderr)
@@ -90,8 +123,10 @@ def main() -> int:
         print(f"New activity types, add them to GROUPS: {unknown}", file=sys.stderr)
         return 2
 
+    ordered = df.sort_values("Date", ascending=False)
+    reports = report_links(df, list(ordered.index))
     rows = []
-    for r in df.sort_values("Date", ascending=False).itertuples():
+    for r, links in zip(ordered.itertuples(), reports):
         # Accidents without a recorded spot have lat = lon = 0.
         located = r.lat != 0 and r.lon != 0
         travel = tidy_text(r.TravelMode)
@@ -107,12 +142,13 @@ def main() -> int:
             travel.capitalize() if travel else None,
             int(r.Killed),
             tidy_text(r.Description),
+            links,                                # [[source, url], ...] or None
         ])
 
     data = {
         "source": f"Colorado Avalanche Information Center (CAIC), {workbook.name}",
         "fields": ["season", "date", "location", "state", "lat", "lon", "group", "activity", "travel",
-                   "killed", "description"],
+                   "killed", "description", "reports"],
         "groups": list(GROUPS),
         "rows": rows,
     }
@@ -129,6 +165,7 @@ def main() -> int:
     print(f"Workbook:  {workbook.name}")
     print(f"Accidents: {len(rows)}  ({located} with map coordinates)")
     print(f"Killed:    {sum(row[9] for row in rows)}")
+    print(f"Linked:    {sum(1 for row in rows if row[11])} accidents have a report link")
     first, last = min(row[0] for row in rows), max(row[0] for row in rows)
     print(f"Winters:   {first - 1}-{str(first)[2:]} to {last - 1}-{str(last)[2:]}")
     print(f"Wrote:     {page}")

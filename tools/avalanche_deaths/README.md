@@ -13,7 +13,17 @@ CAIC publishes an updated workbook each fall.
 
 1. Put the new `.xlsx` file in `raw/` (keep the CAIC file name, e.g.
    `CAIC_Accident_Data_Oct_2026.xlsx`; the page reads the month and year from it).
-2. Run:
+2. Refresh the accident report links. The Utah Avalanche Center's website blocks scripts,
+   so first open https://utahavalanchecenter.org/avalanches/fatalities in your browser and
+   save it (File > Save Page As) as `raw/uac_fatalities.html`. Then run:
+
+   ```
+   python tools/avalanche_deaths/fetch_reports.py
+   ```
+
+   It downloads CAIC's list of fatal accident reports into `raw/reports_caic.json` and reads the
+   saved Utah page into `raw/reports_uac.json`. Skip the Utah step and it keeps last year's list.
+3. Build the page:
 
    ```
    pip install pandas openpyxl
@@ -21,12 +31,27 @@ CAIC publishes an updated workbook each fall.
    ```
 
    With no arguments it uses the newest `.xlsx` in `raw/` (by the month and year in its name) and
-   prints a summary: accidents, deaths, how many have coordinates, and the winters covered.
-3. If it stops with "New activity types", CAIC added a victim activity. Add it to one
+   prints a summary: accidents, deaths, how many have coordinates, how many link to a report,
+   and the winters covered.
+4. If it stops with "New activity types", CAIC added a victim activity. Add it to one
    of the seven groups in `GROUPS` at the top of the script and run it again.
 
 Everything on the page (totals, the opening paragraph, the timeline range, the "Last 10
 winters" button) is computed from the data, so nothing else needs editing.
+
+## Accident report links
+
+Each avalanche links to its published accident report where one exists:
+
+- **CAIC report**: CAIC's US accident database (the same list avalanche.org shows). Besides
+  Colorado's own investigations it hosts reports from other states' avalanche centers, so it
+  covers nearly every US fatal avalanche since the 2009-10 winter, and Colorado's back to 1951.
+- **UAC report**: the Utah Avalanche Center's fatality list, which goes back much further for Utah.
+
+The workbook doesn't record report IDs, so `report_links.py` matches reports to rows by state,
+date, place name, coordinates and number killed. A link is left off when the match is uncertain:
+date and deaths alone count only when it was the state's only fatal avalanche that day. In the
+October 2025 workbook, 603 of 1,016 avalanches get a link, including 343 of the 345 since 2009-10.
 
 ## Shaded relief and mountain names
 
