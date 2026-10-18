@@ -1,0 +1,1446 @@
+[
+{
+"id": "102008",
+"url": "https://utahavalanchecenter.org/avalanche/102008",
+"state": "UT",
+"date": "2026-02-22",
+"killed": 1,
+"loc": "Caribou Basin",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "102308",
+"url": "https://utahavalanchecenter.org/avalanche/102308",
+"state": "UT",
+"date": "2026-02-21",
+"killed": 1,
+"loc": "Butler Basin",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "101775",
+"url": "https://utahavalanchecenter.org/avalanche/101775",
+"state": "UT",
+"date": "2026-02-19",
+"killed": 1,
+"loc": "Lake Mary Chutes",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "101704",
+"url": "https://utahavalanchecenter.org/avalanche/101704",
+"state": "UT",
+"date": "2026-02-18",
+"killed": 1,
+"loc": "Ant Knolls",
+"region": "Provo",
+"words": [
+"provo"
+]
+},
+{
+"id": "94669",
+"url": "https://utahavalanchecenter.org/avalanche/94669",
+"state": "UT",
+"date": "2025-03-07",
+"killed": 1,
+"loc": "Hoyt Peak",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "93000",
+"url": "https://utahavalanchecenter.org/avalanche/93000",
+"state": "UT",
+"date": "2025-02-08",
+"killed": 1,
+"loc": "East Bowl",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "92813",
+"url": "https://utahavalanchecenter.org/avalanche/92813",
+"state": "UT",
+"date": "2025-02-03",
+"killed": 1,
+"loc": "Monte Cristo",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "90771",
+"url": "https://utahavalanchecenter.org/avalanche/90771",
+"state": "UT",
+"date": "2024-12-31",
+"killed": 1,
+"loc": "Davenport Hill",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "90994",
+"url": "https://utahavalanchecenter.org/avalanche/90994",
+"state": "UT",
+"date": "2024-12-28",
+"killed": 1,
+"loc": "Main Porter",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "87576",
+"url": "https://utahavalanchecenter.org/avalanche/87576",
+"state": "UT",
+"date": "2024-05-09",
+"killed": 2,
+"loc": "Big Willow",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "78637",
+"url": "https://utahavalanchecenter.org/avalanche/78637",
+"state": "UT",
+"date": "2023-04-17",
+"killed": 1,
+"loc": "Brighton",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "77884",
+"url": "https://utahavalanchecenter.org/avalanche/77884",
+"state": "UT",
+"date": "2023-03-27",
+"killed": 1,
+"loc": "Pole Canyon",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "78246",
+"url": "https://utahavalanchecenter.org/avalanche/78246",
+"state": "UT",
+"date": "2023-03-09",
+"killed": 1,
+"loc": "Upper Weber Canyon",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "60132",
+"url": "https://utahavalanchecenter.org/avalanche/60132",
+"state": "ID",
+"date": "2021-02-20",
+"killed": 1,
+"loc": "Sherman Peak",
+"region": "SE Idaho",
+"words": []
+},
+{
+"id": "59084",
+"url": "https://utahavalanchecenter.org/avalanche/59084",
+"state": "UT",
+"date": "2021-02-06",
+"killed": 4,
+"loc": "Wilson Glade",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "58594",
+"url": "https://utahavalanchecenter.org/avalanche/58594",
+"state": "UT",
+"date": "2021-01-30",
+"killed": 1,
+"loc": "Squaretop",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "57388",
+"url": "https://utahavalanchecenter.org/avalanche/57388",
+"state": "UT",
+"date": "2021-01-08",
+"killed": 1,
+"loc": "Dutch Draw",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "50645",
+"url": "https://utahavalanchecenter.org/avalanche/50645",
+"state": "UT",
+"date": "2020-01-18",
+"killed": 1,
+"loc": "Farmington Lakes",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "48937",
+"url": "https://utahavalanchecenter.org/avalanche/48937",
+"state": "UT",
+"date": "2019-12-15",
+"killed": 1,
+"loc": "Dutch Draw",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "44217",
+"url": "https://utahavalanchecenter.org/avalanche/44217",
+"state": "UT",
+"date": "2019-02-09",
+"killed": 1,
+"loc": "Chalk Creek",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "44175",
+"url": "https://utahavalanchecenter.org/avalanche/44175",
+"state": "UT",
+"date": "2019-02-07",
+"killed": 1,
+"loc": "Circleville Mountain",
+"region": "Southwest",
+"words": []
+},
+{
+"id": "43487",
+"url": "https://utahavalanchecenter.org/avalanche/43487",
+"state": "UT",
+"date": "2019-01-25",
+"killed": 1,
+"loc": "East Face Laurel Peak",
+"region": "Moab",
+"words": [
+"moab"
+]
+},
+{
+"id": "43026",
+"url": "https://utahavalanchecenter.org/avalanche/43026",
+"state": "UT",
+"date": "2019-01-18",
+"killed": 1,
+"loc": "Electric Lake",
+"region": "Skyline",
+"words": [
+"skyline"
+]
+},
+{
+"id": "26533",
+"url": "https://utahavalanchecenter.org/avalanche/26533",
+"state": "UT",
+"date": "2016-01-31",
+"killed": 1,
+"loc": "Pointy Peak",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "26182",
+"url": "https://utahavalanchecenter.org/avalanche/26182",
+"state": "UT",
+"date": "2016-01-21",
+"killed": 1,
+"loc": "Gobblers Knob",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "23779",
+"url": "https://utahavalanchecenter.org/avalanche/23779",
+"state": "UT",
+"date": "2015-03-04",
+"killed": 1,
+"loc": "Hells Canyon",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "20973",
+"url": "https://utahavalanchecenter.org/avalanche/20973",
+"state": "UT",
+"date": "2014-03-07",
+"killed": 1,
+"loc": "Gold Hill",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "20327",
+"url": "https://utahavalanchecenter.org/avalanche/20327",
+"state": "UT",
+"date": "2014-02-09",
+"killed": 1,
+"loc": "Huntington Reservior",
+"region": "Skyline",
+"words": [
+"skyline"
+]
+},
+{
+"id": "20275",
+"url": "https://utahavalanchecenter.org/avalanche/20275",
+"state": "UT",
+"date": "2014-02-08",
+"killed": 1,
+"loc": "Tibble Fork",
+"region": "Provo",
+"words": [
+"provo"
+]
+},
+{
+"id": "16589",
+"url": "https://utahavalanchecenter.org/avalanche/16589",
+"state": "UT",
+"date": "2013-04-11",
+"killed": 1,
+"loc": "Kessler Slabs",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "15884",
+"url": "https://utahavalanchecenter.org/avalanche/15884",
+"state": "UT",
+"date": "2013-03-01",
+"killed": 1,
+"loc": "White Mountain",
+"region": "Skyline",
+"words": [
+"skyline"
+]
+},
+{
+"id": "15096",
+"url": "https://utahavalanchecenter.org/avalanche/15096",
+"state": "UT",
+"date": "2013-01-18",
+"killed": 2,
+"loc": "West Fork Duchesne River",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "18257",
+"url": "https://utahavalanchecenter.org/avalanche/18257",
+"state": "UT",
+"date": "2012-03-03",
+"killed": 1,
+"loc": "Beaver Basin",
+"region": "Moab",
+"words": [
+"moab"
+]
+},
+{
+"id": "18180",
+"url": "https://utahavalanchecenter.org/avalanche/18180",
+"state": "UT",
+"date": "2012-02-23",
+"killed": 1,
+"loc": "Dutch Draw",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "18157",
+"url": "https://utahavalanchecenter.org/avalanche/18157",
+"state": "UT",
+"date": "2012-02-05",
+"killed": 1,
+"loc": "Lost Creek Reservoir",
+"region": "Southwest",
+"words": []
+},
+{
+"id": "18137",
+"url": "https://utahavalanchecenter.org/avalanche/18137",
+"state": "UT",
+"date": "2012-01-28",
+"killed": 1,
+"loc": "Kessler Peak",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "17964",
+"url": "https://utahavalanchecenter.org/avalanche/17964",
+"state": "UT",
+"date": "2011-11-13",
+"killed": 1,
+"loc": "Gad Valley",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "17867",
+"url": "https://utahavalanchecenter.org/avalanche/17867",
+"state": "UT",
+"date": "2011-03-26",
+"killed": 1,
+"loc": "Horseshoe Mountain",
+"region": "Skyline",
+"words": [
+"skyline"
+]
+},
+{
+"id": "17486",
+"url": "https://utahavalanchecenter.org/avalanche/17486",
+"state": "UT",
+"date": "2010-11-26",
+"killed": 1,
+"loc": "Cherry Hill",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "17407",
+"url": "https://utahavalanchecenter.org/avalanche/17407",
+"state": "UT",
+"date": "2010-04-04",
+"killed": 1,
+"loc": "Francis Peak",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "17049",
+"url": "https://utahavalanchecenter.org/avalanche/17049",
+"state": "UT",
+"date": "2010-01-29",
+"killed": 1,
+"loc": "Grandview Peak",
+"region": "Session Mountains",
+"words": []
+},
+{
+"id": "17030",
+"url": "https://utahavalanchecenter.org/avalanche/17030",
+"state": "UT",
+"date": "2010-01-27",
+"killed": 1,
+"loc": "Meadows",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "16995",
+"url": "https://utahavalanchecenter.org/avalanche/16995",
+"state": "UT",
+"date": "2010-01-24",
+"killed": 1,
+"loc": "Hells Canyon",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "17461",
+"url": "https://utahavalanchecenter.org/avalanche/17461",
+"state": "UT",
+"date": "2008-12-30",
+"killed": 1,
+"loc": "Yamaha Hill",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "17459",
+"url": "https://utahavalanchecenter.org/avalanche/17459",
+"state": "UT",
+"date": "2008-12-24",
+"killed": 2,
+"loc": "Fairgrounds",
+"region": "Logan",
+"words": [
+"logan"
+]
+},
+{
+"id": "17456",
+"url": "https://utahavalanchecenter.org/avalanche/17456",
+"state": "UT",
+"date": "2008-12-14",
+"killed": 1,
+"loc": "Snowbird Ski Resort",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "17454",
+"url": "https://utahavalanchecenter.org/avalanche/17454",
+"state": "UT",
+"date": "2007-12-31",
+"killed": 1,
+"loc": "Co-op Creek",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "17453",
+"url": "https://utahavalanchecenter.org/avalanche/17453",
+"state": "UT",
+"date": "2007-12-25",
+"killed": 1,
+"loc": "Super Bowl",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "17452",
+"url": "https://utahavalanchecenter.org/avalanche/17452",
+"state": "UT",
+"date": "2007-12-23",
+"killed": 1,
+"loc": "Canyons Ski Resort",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "17448",
+"url": "https://utahavalanchecenter.org/avalanche/17448",
+"state": "UT",
+"date": "2007-02-21",
+"killed": 1,
+"loc": "Big Cottonwood Canyon",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "17445",
+"url": "https://utahavalanchecenter.org/avalanche/17445",
+"state": "UT",
+"date": "2007-02-18",
+"killed": 1,
+"loc": "Buck Basin",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "17447",
+"url": "https://utahavalanchecenter.org/avalanche/17447",
+"state": "UT",
+"date": "2007-02-18",
+"killed": 1,
+"loc": "Hells Canyon",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "17446",
+"url": "https://utahavalanchecenter.org/avalanche/17446",
+"state": "UT",
+"date": "2007-02-17",
+"killed": 1,
+"loc": "Fish Lake Area",
+"region": "Southwest",
+"words": []
+},
+{
+"id": "17442",
+"url": "https://utahavalanchecenter.org/avalanche/17442",
+"state": "UT",
+"date": "2006-04-03",
+"killed": 1,
+"loc": "Pioneer Peak",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "17441",
+"url": "https://utahavalanchecenter.org/avalanche/17441",
+"state": "UT",
+"date": "2006-03-11",
+"killed": 1,
+"loc": "Taylor Canyon",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "17440",
+"url": "https://utahavalanchecenter.org/avalanche/17440",
+"state": "UT",
+"date": "2005-12-31",
+"killed": 1,
+"loc": "Emerald Lake",
+"region": "Provo",
+"words": [
+"provo"
+]
+},
+{
+"id": "17437",
+"url": "https://utahavalanchecenter.org/avalanche/17437",
+"state": "UT",
+"date": "2005-03-31",
+"killed": 1,
+"loc": "Whiskey Hill",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "17436",
+"url": "https://utahavalanchecenter.org/avalanche/17436",
+"state": "UT",
+"date": "2005-01-14",
+"killed": 1,
+"loc": "Dutch Draw",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "17434",
+"url": "https://utahavalanchecenter.org/avalanche/17434",
+"state": "UT",
+"date": "2005-01-08",
+"killed": 1,
+"loc": "Blue Bell",
+"region": "Skyline",
+"words": [
+"skyline"
+]
+},
+{
+"id": "17435",
+"url": "https://utahavalanchecenter.org/avalanche/17435",
+"state": "UT",
+"date": "2005-01-08",
+"killed": 1,
+"loc": "Chokecherry Ridge",
+"region": "Skyline",
+"words": [
+"skyline"
+]
+},
+{
+"id": "17431",
+"url": "https://utahavalanchecenter.org/avalanche/17431",
+"state": "UT",
+"date": "2004-12-11",
+"killed": 2,
+"loc": "Mineral Fork",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "17432",
+"url": "https://utahavalanchecenter.org/avalanche/17432",
+"state": "UT",
+"date": "2004-12-11",
+"killed": 1,
+"loc": "Trout Creek",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "17428",
+"url": "https://utahavalanchecenter.org/avalanche/17428",
+"state": "UT",
+"date": "2004-12-10",
+"killed": 1,
+"loc": "Twin Lakes Pass",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "24260",
+"url": "https://utahavalanchecenter.org/avalanche/24260",
+"state": "UT",
+"date": "2004-02-26",
+"killed": 1,
+"loc": "Daly Canyon",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "24261",
+"url": "https://utahavalanchecenter.org/avalanche/24261",
+"state": "UT",
+"date": "2003-12-26",
+"killed": 3,
+"loc": "Aspen Grove",
+"region": "Provo",
+"words": [
+"provo"
+]
+},
+{
+"id": "21124",
+"url": "https://utahavalanchecenter.org/avalanche/21124",
+"state": "UT",
+"date": "2003-02-15",
+"killed": 1,
+"loc": "Gobblers Knob",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21856",
+"url": "https://utahavalanchecenter.org/avalanche/21856",
+"state": "UT",
+"date": "2002-03-16",
+"killed": 2,
+"loc": "Dog Lake area",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21855",
+"url": "https://utahavalanchecenter.org/avalanche/21855",
+"state": "UT",
+"date": "2002-01-31",
+"killed": 1,
+"loc": "Windy Ridge",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "21853",
+"url": "https://utahavalanchecenter.org/avalanche/21853",
+"state": "UT",
+"date": "2001-04-28",
+"killed": 2,
+"loc": "Stairs Gulch",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21854",
+"url": "https://utahavalanchecenter.org/avalanche/21854",
+"state": "UT",
+"date": "2001-03-10",
+"killed": 2,
+"loc": "Chalk Creek",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "21852",
+"url": "https://utahavalanchecenter.org/avalanche/21852",
+"state": "UT",
+"date": "2001-02-27",
+"killed": 1,
+"loc": "Red Rock Cliffs",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21851",
+"url": "https://utahavalanchecenter.org/avalanche/21851",
+"state": "UT",
+"date": "2000-12-14",
+"killed": 1,
+"loc": "Willard Peak",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "104264",
+"url": "https://utahavalanchecenter.org/avalanche/104264",
+"state": "ID",
+"date": "2000-02-19",
+"killed": 1,
+"loc": "Saint Charles Canyon",
+"region": "SE Idaho",
+"words": []
+},
+{
+"id": "21850",
+"url": "https://utahavalanchecenter.org/avalanche/21850",
+"state": "UT",
+"date": "2000-01-11",
+"killed": 2,
+"loc": "Squaretop",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21137",
+"url": "https://utahavalanchecenter.org/avalanche/21137",
+"state": "UT",
+"date": "1999-02-06",
+"killed": 1,
+"loc": "Dolphin",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21136",
+"url": "https://utahavalanchecenter.org/avalanche/21136",
+"state": "UT",
+"date": "1999-01-29",
+"killed": 1,
+"loc": "Mt Nebo",
+"region": "Provo",
+"words": [
+"provo"
+]
+},
+{
+"id": "21135",
+"url": "https://utahavalanchecenter.org/avalanche/21135",
+"state": "UT",
+"date": "1999-01-02",
+"killed": 2,
+"loc": "Big Drift/Skyline Summit",
+"region": "Skyline",
+"words": [
+"skyline"
+]
+},
+{
+"id": "21134",
+"url": "https://utahavalanchecenter.org/avalanche/21134",
+"state": "UT",
+"date": "1998-11-07",
+"killed": 1,
+"loc": "Snowbird Ski Resort",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21133",
+"url": "https://utahavalanchecenter.org/avalanche/21133",
+"state": "UT",
+"date": "1998-02-26",
+"killed": 1,
+"loc": "Ogden",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "21131",
+"url": "https://utahavalanchecenter.org/avalanche/21131",
+"state": "UT",
+"date": "1998-01-18",
+"killed": 1,
+"loc": "Spring Canyon",
+"region": "Uintas",
+"words": [
+"uinta",
+"uintas"
+]
+},
+{
+"id": "21132",
+"url": "https://utahavalanchecenter.org/avalanche/21132",
+"state": "UT",
+"date": "1998-01-17",
+"killed": 1,
+"loc": "Pleasant Creek",
+"region": "Skyline",
+"words": [
+"skyline"
+]
+},
+{
+"id": "21130",
+"url": "https://utahavalanchecenter.org/avalanche/21130",
+"state": "UT",
+"date": "1997-01-25",
+"killed": 1,
+"loc": "The Fang",
+"region": "Provo",
+"words": [
+"provo"
+]
+},
+{
+"id": "21129",
+"url": "https://utahavalanchecenter.org/avalanche/21129",
+"state": "UT",
+"date": "1997-01-11",
+"killed": 3,
+"loc": "Logan Peak",
+"region": "Logan",
+"words": [
+"logan"
+]
+},
+{
+"id": "78925",
+"url": "https://utahavalanchecenter.org/avalanche/78925",
+"state": "ID",
+"date": "1997-01-01",
+"killed": 1,
+"loc": "Fox Canyon",
+"region": "SE Idaho",
+"words": []
+},
+{
+"id": "21128",
+"url": "https://utahavalanchecenter.org/avalanche/21128",
+"state": "UT",
+"date": "1996-12-26",
+"killed": 1,
+"loc": "Flagstaff Gully",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21127",
+"url": "https://utahavalanchecenter.org/avalanche/21127",
+"state": "UT",
+"date": "1996-12-07",
+"killed": 1,
+"loc": "Bountiful Peak",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "21126",
+"url": "https://utahavalanchecenter.org/avalanche/21126",
+"state": "UT",
+"date": "1996-03-27",
+"killed": 1,
+"loc": "Maybird Gulch",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21125",
+"url": "https://utahavalanchecenter.org/avalanche/21125",
+"state": "UT",
+"date": "1996-02-02",
+"killed": 1,
+"loc": "Solitude",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "24259",
+"url": "https://utahavalanchecenter.org/avalanche/24259",
+"state": "UT",
+"date": "1995-02-12",
+"killed": 1,
+"loc": "Gobblers Knob",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21123",
+"url": "https://utahavalanchecenter.org/avalanche/21123",
+"state": "UT",
+"date": "1995-01-23",
+"killed": 1,
+"loc": "Brighton Estates",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21122",
+"url": "https://utahavalanchecenter.org/avalanche/21122",
+"state": "UT",
+"date": "1995-01-14",
+"killed": 2,
+"loc": "Cutler Ridge",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "21121",
+"url": "https://utahavalanchecenter.org/avalanche/21121",
+"state": "UT",
+"date": "1994-11-07",
+"killed": 1,
+"loc": "Snowbird Ski Resort",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21120",
+"url": "https://utahavalanchecenter.org/avalanche/21120",
+"state": "UT",
+"date": "1994-02-18",
+"killed": 1,
+"loc": "10420",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21119",
+"url": "https://utahavalanchecenter.org/avalanche/21119",
+"state": "UT",
+"date": "1993-04-03",
+"killed": 1,
+"loc": "Wolverine Cirque",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21118",
+"url": "https://utahavalanchecenter.org/avalanche/21118",
+"state": "UT",
+"date": "1993-02-25",
+"killed": 1,
+"loc": "Pinecrest",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21117",
+"url": "https://utahavalanchecenter.org/avalanche/21117",
+"state": "UT",
+"date": "1993-01-16",
+"killed": 1,
+"loc": "Sundance",
+"region": "Provo",
+"words": [
+"provo"
+]
+},
+{
+"id": "21116",
+"url": "https://utahavalanchecenter.org/avalanche/21116",
+"state": "UT",
+"date": "1992-04-01",
+"killed": 1,
+"loc": "Snowbird periphery",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "81348",
+"url": "https://utahavalanchecenter.org/avalanche/81348",
+"state": "UT",
+"date": "1992-02-12",
+"killed": 4,
+"loc": "Talking Mountain Cirque",
+"region": "Moab",
+"words": [
+"moab"
+]
+},
+{
+"id": "21114",
+"url": "https://utahavalanchecenter.org/avalanche/21114",
+"state": "UT",
+"date": "1989-11-25",
+"killed": 1,
+"loc": "Miller Bowl",
+"region": "Logan",
+"words": [
+"logan"
+]
+},
+{
+"id": "21113",
+"url": "https://utahavalanchecenter.org/avalanche/21113",
+"state": "UT",
+"date": "1987-02-15",
+"killed": 1,
+"loc": "Figure 8 Hill",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "24257",
+"url": "https://utahavalanchecenter.org/avalanche/24257",
+"state": "UT",
+"date": "1986-11-20",
+"killed": 1,
+"loc": "Devils Castle",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21111",
+"url": "https://utahavalanchecenter.org/avalanche/21111",
+"state": "UT",
+"date": "1986-02-19",
+"killed": 1,
+"loc": "Alta Ski Area",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21110",
+"url": "https://utahavalanchecenter.org/avalanche/21110",
+"state": "UT",
+"date": "1986-02-17",
+"killed": 1,
+"loc": "Brighton Hill",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "21109",
+"url": "https://utahavalanchecenter.org/avalanche/21109",
+"state": "UT",
+"date": "1986-01-06",
+"killed": 1,
+"loc": "Water Hollow",
+"region": "Provo",
+"words": [
+"provo"
+]
+},
+{
+"id": "20768",
+"url": "https://utahavalanchecenter.org/avalanche/20768",
+"state": "UT",
+"date": "1985-11-13",
+"killed": 2,
+"loc": "Sunset Peak",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "20766",
+"url": "https://utahavalanchecenter.org/avalanche/20766",
+"state": "UT",
+"date": "1985-03-19",
+"killed": 1,
+"loc": "Park City Ski Resort",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "20757",
+"url": "https://utahavalanchecenter.org/avalanche/20757",
+"state": "UT",
+"date": "1985-02-22",
+"killed": 1,
+"loc": "Powder Mountain",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "20746",
+"url": "https://utahavalanchecenter.org/avalanche/20746",
+"state": "UT",
+"date": "1984-01-02",
+"killed": 1,
+"loc": "Little Superior",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "104216",
+"url": "https://utahavalanchecenter.org/avalanche/104216",
+"state": "ID",
+"date": "1982-11-14",
+"killed": 1,
+"loc": "Bald Mountain",
+"region": "SE Idaho",
+"words": []
+},
+{
+"id": "20745",
+"url": "https://utahavalanchecenter.org/avalanche/20745",
+"state": "UT",
+"date": "1982-03-22",
+"killed": 1,
+"loc": "Murdock Peak",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "20744",
+"url": "https://utahavalanchecenter.org/avalanche/20744",
+"state": "UT",
+"date": "1981-03-01",
+"killed": 1,
+"loc": "Porter Fork",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "20743",
+"url": "https://utahavalanchecenter.org/avalanche/20743",
+"state": "UT",
+"date": "1981-02-01",
+"killed": 1,
+"loc": "Doughnut Falls",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "20742",
+"url": "https://utahavalanchecenter.org/avalanche/20742",
+"state": "UT",
+"date": "1980-01-11",
+"killed": 1,
+"loc": "Evergreen Ridge",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "20741",
+"url": "https://utahavalanchecenter.org/avalanche/20741",
+"state": "UT",
+"date": "1979-04-02",
+"killed": 1,
+"loc": "Lake Desolation",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "20740",
+"url": "https://utahavalanchecenter.org/avalanche/20740",
+"state": "UT",
+"date": "1979-01-19",
+"killed": 1,
+"loc": "Helper",
+"region": "Other",
+"words": []
+},
+{
+"id": "20739",
+"url": "https://utahavalanchecenter.org/avalanche/20739",
+"state": "UT",
+"date": "1977-03-03",
+"killed": 1,
+"loc": "Snowbird Ski Resort",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "18427",
+"url": "https://utahavalanchecenter.org/avalanche/18427",
+"state": "UT",
+"date": "1976-01-06",
+"killed": 1,
+"loc": "Alta Ski Area",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "18426",
+"url": "https://utahavalanchecenter.org/avalanche/18426",
+"state": "UT",
+"date": "1973-12-29",
+"killed": 1,
+"loc": "Canyons Ski Resort",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "18547",
+"url": "https://utahavalanchecenter.org/avalanche/18547",
+"state": "UT",
+"date": "1970-01-29",
+"killed": 1,
+"loc": "Peruvian Ridge",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "18546",
+"url": "https://utahavalanchecenter.org/avalanche/18546",
+"state": "UT",
+"date": "1968-02-19",
+"killed": 1,
+"loc": "Rock Canyon",
+"region": "Provo",
+"words": [
+"provo"
+]
+},
+{
+"id": "18545",
+"url": "https://utahavalanchecenter.org/avalanche/18545",
+"state": "UT",
+"date": "1967-02-12",
+"killed": 2,
+"loc": "Pharoahs Glen",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "18400",
+"url": "https://utahavalanchecenter.org/avalanche/18400",
+"state": "UT",
+"date": "1965-12-31",
+"killed": 1,
+"loc": "Park City Ski Resort",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "18399",
+"url": "https://utahavalanchecenter.org/avalanche/18399",
+"state": "UT",
+"date": "1964-03-29",
+"killed": 1,
+"loc": "Taylor Canyon",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "18397",
+"url": "https://utahavalanchecenter.org/avalanche/18397",
+"state": "UT",
+"date": "1958-03-09",
+"killed": 2,
+"loc": "John Paul",
+"region": "Ogden",
+"words": [
+"ogden"
+]
+},
+{
+"id": "88152",
+"url": "https://utahavalanchecenter.org/avalanche/88152",
+"state": "UT",
+"date": "1950-03-28",
+"killed": 1,
+"loc": "White Pine",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "78598",
+"url": "https://utahavalanchecenter.org/avalanche/78598",
+"state": "UT",
+"date": "1941-01-01",
+"killed": 1,
+"loc": "Alta Ski Area",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "82986",
+"url": "https://utahavalanchecenter.org/avalanche/82986",
+"state": "UT",
+"date": "1926-02-17",
+"killed": 35,
+"loc": "Oquirrh Mountains",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "87758",
+"url": "https://utahavalanchecenter.org/avalanche/87758",
+"state": "UT",
+"date": "1920-04-02",
+"killed": 4,
+"loc": "Oquirrh Mountains",
+"region": "Salt Lake",
+"words": []
+},
+{
+"id": "87645",
+"url": "https://utahavalanchecenter.org/avalanche/87645",
+"state": "ID",
+"date": "1917-02-25",
+"killed": 15,
+"loc": "SE Idaho",
+"region": "SE Idaho",
+"words": []
+},
+{
+"id": "43653",
+"url": "https://utahavalanchecenter.org/avalanche/43653",
+"state": "UT",
+"date": "1914-01-10",
+"killed": 1,
+"loc": "Canal Creek",
+"region": "Skyline",
+"words": [
+"skyline"
+]
+},
+{
+"id": "92039",
+"url": "https://utahavalanchecenter.org/avalanche/92039",
+"state": "UT",
+"date": "1880-02-26",
+"killed": 2,
+"loc": "Logan River below Temple Fork",
+"region": "Logan",
+"words": [
+"logan"
+]
+},
+{
+"id": "92193",
+"url": "https://utahavalanchecenter.org/avalanche/92193",
+"state": "UT",
+"date": "1877-02-15",
+"killed": 1,
+"loc": "Dry Curtis Creek",
+"region": "Logan",
+"words": [
+"logan"
+]
+}
+]

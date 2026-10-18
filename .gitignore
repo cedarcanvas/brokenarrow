@@ -20,3 +20,6 @@ tools/usps_transit_map/raw/census/*
 !tools/usps_transit_map/raw/census/README.md
 tools/usps_transit_map/raw/demo/
 tools/usps_transit_map/web/data/
+
+# Avalanche map: the Utah Avalanche Center page saved from a browser (parsed into raw/reports_uac.json)
+tools/avalanche_deaths/raw/uac_fatalities.html
