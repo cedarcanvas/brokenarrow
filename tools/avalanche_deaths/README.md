@@ -28,6 +28,28 @@ CAIC publishes an updated workbook each fall.
 Everything on the page (totals, the opening paragraph, the timeline range, the "Last 10
 winters" button) is computed from the data, so nothing else needs editing.
 
+## Shaded relief and mountain names
+
+The terrain under the map is a set of JPEG tiles in
+`tools/maps_site/avalanche-deaths/relief/{level}/{x}/{y}.jpg`, made by `build_relief.py`.
+It only needs re-running if you change the relief settings at the top of that script
+(lighting, exaggeration) or the map's projection; a new CAIC workbook doesn't affect it.
+
+```
+pip install numpy pillow
+python tools/avalanche_deaths/build_relief.py
+```
+
+- Elevation comes from the AWS Terrain Tiles open dataset (USGS 3DEP in the US). The first
+  run downloads about 95 MB into `.cache/` (ignored by git); later runs reuse it.
+- The script reprojects the elevation with the same math as D3's `geoAlbersUsa`, so the
+  shading lines up with the state outlines, and makes 4 zoom levels of tiles (about 3.5 MB).
+  The page loads sharper tiles as you zoom in.
+- Tiles are gray, with 128 meaning flat. The page lays them over the state colors with the
+  `hard-light` blend: shadows darken, sunlit slopes lighten, flat ground is unchanged.
+- It also writes mountain range and peak names (Natural Earth) into the page. Each shows
+  up once you zoom in far enough for it.
+
 ## About the data
 
 - One row per avalanche accident in which at least one person died, winters 1950-51 on.
