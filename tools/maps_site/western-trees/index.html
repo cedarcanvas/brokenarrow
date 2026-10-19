@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Western Trees Atlas · Ridgeline Maps</title>
+<meta name="description" content="Interactive atlas of fifty native trees of western North America: see where each grows, where ranges meet, and how much forest was lost from 2001 to 2024.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta property="og:title" content="Western Trees Atlas · Ridgeline Maps">
+<meta property="og:description" content="Fifty native trees of the American West, from interior Alaska to Mexico: pick species to see their ranges and overlaps, point anywhere to see which trees grow there, and play back 24 years of observed canopy loss.">
+<meta property="og:image" content="https://maps.ridgelinemaps.com/previews/western-trees.jpg">
+<meta property="og:url" content="https://maps.ridgelinemaps.com/western-trees/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a field atlas spread - the map plate on the left, the species register on the right; stacked on phones. */
+:root {
+  --paper: #f4f2ec; --plate: #e9e6dc; --ink: #15211d; --muted: #56635d; --rule: #d3d0c4;
+  --accent: #2f7553; --accent-ink: #ffffff; --chip: #ebe8de; --loss: #b8321f; --lossbar: #d98a4e;
+  --display: "Spectral", "Hoefler Text", Georgia, serif;
+  --ui: "Public Sans", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121815; --plate: #1a221e; --ink: #e6ebe4; --muted: #9aa69f; --rule: #2e3833;
+    --accent: #7fc196; --accent-ink: #0d1411; --chip: #202a25; --loss: #ef6a4a; --lossbar: #a8603a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #121815; --plate: #1a221e; --ink: #e6ebe4; --muted: #9aa69f; --rule: #2e3833;
+  --accent: #7fc196; --accent-ink: #0d1411; --chip: #202a25; --loss: #ef6a4a; --lossbar: #a8603a; color-scheme: dark;
+}
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--ui); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1440px; margin: 0 auto; padding-block: 28px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { display: grid; gap: 6px; margin-bottom: 20px; }
+h1 { font-family: var(--display); font-weight: 400; font-size: clamp(30px, 4.2vw, 50px); letter-spacing: 0.02em;
+  line-height: 1.05; margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); max-width: 68ch; margin: 0; font-size: 16px; }
+.spread { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 900px) { .spread { grid-template-columns: minmax(0, 1fr); } }
+
+/* the map plate */
+.plate { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); display: grid; gap: 12px; min-width: 0; }
+@media (max-width: 900px) { .plate { position: static; } }
+.mapbox { position: relative; background: var(--plate); border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-ratio: 1400 / 1501; cursor: crosshair; touch-action: none; }
+canvas.dragging { cursor: grabbing; }
+.zoom { position: absolute; right: 12px; top: 12px; display: grid; gap: 4px; }
+.zoom button { width: 34px; height: 34px; display: grid; place-items: center; font-size: 18px; line-height: 1; color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 90%, transparent); border: 1px solid var(--rule); border-radius: 3px; }
+.zoom button:hover { border-color: var(--muted); }
+.zoom .fit { font-size: 11px; letter-spacing: 0.04em; }
+.hint { font-size: 12px; color: var(--muted); }
+.tabs { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; width: fit-content; max-width: 100%; }
+.tabs button { background: transparent; color: var(--ink); border: 0; padding: 8px 14px; font-size: 14px; }
+.tabs button + button { border-left: 1px solid var(--rule); }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.timebar { display: grid; gap: 8px; background: var(--plate); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 14px; }
+.timebar .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.year { font-family: var(--display); font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; min-width: 3.2ch; }
+.timebar input[type=range] { flex: 1 1 180px; min-width: 0; accent-color: var(--accent); }
+.timebar .sub { font-size: 13px; color: var(--muted); }
+.chart { width: 100%; height: auto; display: block; }
+.chart text { fill: var(--muted); font-family: var(--ui); font-size: 11px; }
+.chart .bar { fill: var(--lossbar); }
+.chart .bar.now { fill: var(--loss); }
+.chart .bar.after { fill: var(--rule); }
+.marker { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+  border: 2px solid var(--ink); background: transparent; pointer-events: none; }
+.status { position: absolute; left: 12px; top: 12px; background: color-mix(in srgb, var(--paper) 88%, transparent);
+  border: 1px solid var(--rule); border-radius: 3px; padding: 6px 10px; font-size: 13px; color: var(--ink); max-width: calc(100% - 24px); }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; font-size: 13px; color: var(--muted); }
+.ramp { display: flex; align-items: stretch; height: 12px; border-radius: 2px; overflow: hidden; border: 1px solid var(--rule); }
+.ramp span { width: 26px; }
+.ramp-labels { display: flex; justify-content: space-between; width: 100%; font-variant-numeric: tabular-nums; }
+.legend-block { display: grid; gap: 3px; }
+.here { background: var(--plate); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 14px; display: grid; gap: 8px; }
+.here h2 { margin: 0; font-family: var(--display); font-weight: 600; font-size: 18px; }
+.here p { margin: 0; color: var(--muted); font-size: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* the register */
+.register { display: grid; gap: 18px; min-width: 0; }
+.controls { display: grid; gap: 10px; }
+.search { width: 100%; box-sizing: border-box; font: inherit; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule); border-radius: 4px; padding: 9px 12px; }
+.search:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.picked { font-size: 13px; color: var(--muted); }
+button { font: inherit; cursor: pointer; }
+.btn { background: var(--chip); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; padding: 6px 12px; font-size: 13px; }
+.btn:hover { border-color: var(--muted); }
+.btn[disabled] { opacity: 0.45; cursor: default; }
+.chip { display: inline-flex; align-items: center; gap: 6px; background: var(--chip); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 999px; padding: 3px 10px 3px 6px; font-size: 13px; }
+.chip:hover { border-color: var(--muted); }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.group { display: grid; gap: 2px; }
+.group h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-family: var(--display); font-weight: 600; font-size: 19px; }
+.group h3 small { font-family: var(--ui); font-weight: 400; font-size: 12px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.sp { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: baseline; gap: 4px 10px; width: 100%;
+  text-align: left; background: transparent; color: var(--ink); border: 0; border-bottom: 1px solid var(--rule); padding: 8px 6px; }
+.sp:hover { background: var(--chip); }
+.sp[aria-pressed="true"] { background: var(--chip); box-shadow: inset 3px 0 0 var(--accent); }
+.sp .swatch { width: 12px; height: 12px; border-radius: 2px; align-self: center; }
+.sp .names { min-width: 0; }
+.sp .common { font-weight: 600; font-size: 14px; }
+.sp .latin { font-family: var(--display); font-style: italic; color: var(--muted); font-size: 14px; margin-left: 6px; }
+.sp .area { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sp.dim { opacity: 0.38; }
+footer { margin-top: 28px; color: var(--muted); font-size: 12px; max-width: 90ch; }
+@media (prefers-reduced-motion: no-preference) { canvas { transition: opacity .2s; } }
+/* Site bar, shared with the other maps */
+.rm-bar {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; align-items: center;
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: #15211d; color: #e9eee9; font: 500 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.rm-bar a { color: #e9eee9; text-decoration: none; }
+.rm-bar a:hover, .rm-bar a:focus-visible { text-decoration: underline; }
+.rm-bar nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rm-bar { background: #0b100e; } }
+:root[data-theme="dark"] .rm-bar { background: #0b100e; }
+</style>
+<meta name="google-adsense-account" content="ca-pub-6023845895987273">
+<!-- Google AdSense (Auto ads). Ad placement is controlled in the AdSense dashboard. -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6023845895987273" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="rm-bar"><a href="../">&larr; All interactive maps</a><nav aria-label="Ridgeline Maps"><a href="https://ridgelinemaps.com/store">Shop map prints</a><a href="https://ridgelinemaps.com/custom-maps">Custom maps</a><a href="https://ridgelinemaps.com">ridgelinemaps.com</a></nav></div>
+
+<div class="wrap">
+  <header>
+    <h1>Western Trees Atlas</h1>
+    <p class="lede">Fifty primary native trees of western North America, from interior Alaska to the Mexican border. Pick a species to see where it grows, pick several to see where they meet, or point at the map to see which trees share that place.</p>
+  </header>
+
+  <div class="spread">
+    <section class="plate" aria-label="Map">
+      <div class="tabs" role="tablist" aria-label="Map view">
+        <button type="button" role="tab" id="tab-ranges" aria-selected="true">Species ranges</button>
+        <button type="button" role="tab" id="tab-canopy" aria-selected="false">Canopy change 2001–2024</button>
+      </div>
+      <div class="mapbox">
+        <canvas id="map" width="1400" height="1501" aria-label="Map of tree ranges in western North America"></canvas>
+        <div class="marker" id="marker" hidden></div>
+        <div class="zoom" aria-label="Zoom">
+          <button type="button" id="zin" aria-label="Zoom in">+</button>
+          <button type="button" id="zout" aria-label="Zoom out">−</button>
+          <button type="button" id="zfit" class="fit" aria-label="Show the whole map">ALL</button>
+        </div>
+        <div class="status" id="status">Loading the ranges…</div>
+      </div>
+      <div class="timebar" id="timebar" hidden>
+        <div class="row">
+          <button class="btn" type="button" id="play" aria-label="Play the years">Play</button>
+          <span class="year" id="yearlabel">2024</span>
+          <input type="range" id="year" min="2001" max="2024" step="1" value="2024" aria-label="Year">
+        </div>
+        <div class="sub" id="losssum"></div>
+        <svg class="chart" id="chart" viewBox="0 0 600 150" role="img" aria-label="Forest lost each year"></svg>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="hint">Scroll or pinch to zoom, drag to move, tap a spot to list its trees.</div>
+      <div class="here" id="here">
+        <h2>Point at the map</h2>
+        <p>Hover or tap anywhere to list the species of this atlas that grow there.</p>
+      </div>
+    </section>
+
+    <section class="register" aria-label="Species">
+      <div class="controls">
+        <input class="search" id="search" type="search" placeholder="Find a tree: aspen, Quercus, fir…" aria-label="Find a tree">
+        <div class="chips" id="groups" aria-label="Groups shown in the richness view"></div>
+        <div class="row-actions">
+          <span class="picked" id="picked">No species picked: the map shows how many grow in each place.</span>
+          <button class="btn" id="clear" disabled>Clear picks</button>
+        </div>
+      </div>
+      <div id="list" class="register"></div>
+    </section>
+  </div>
+
+  <footer>Canopy change: Hansen et al. 2013, <i>Science</i> 342; Global Forest Change 2000–2024 v1.12, University of Maryland / Google, CC BY 4.0. Forest is canopy cover of 30% or more in 2000; loss is stand-replacing loss of that canopy, from fire, logging, insects, wind or disease, summed to the 3.5 km grid. Ranges: E. L. Little Jr., <i>Atlas of United States Trees</i> (USDA Forest Service, 1971–1977), digitized by the USGS; the Rocky Mountain bristlecone is clipped to its range east of the Great Basin. They show where each tree grows, not present forest cover. Base map: Natural Earth. Lambert conformal conic projection, 3.5 km grid. © 2026 Ridgeline Maps.</footer>
+</div>
+
+<script>
+(() => {
+  const RAMP = ["#eef0dc", "#c9dca6", "#93bd7c", "#5c9a63", "#2f7553", "#174d3c", "#0b2e26"];
+  const TH = [1, 2, 4, 6, 8, 10, 12];                // lower edge of each colour band (species counts)
+  const canvas = document.getElementById("map"), ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const $ = (id) => document.getElementById(id);
+  let W, H, N, species, groups, lo, hi;            // lo/hi: species bits 0-31 / 32-63 for every pixel
+  const bg = { light: new Image(), dark: new Image() };
+  let picked = new Set(), groupOn = new Set(), filter = "", overlay = null, pointIdx = null;
+  let mode = "ranges", year = 2024, canopy = null;           // canopy: { meta, forest, loss: Map(year -> Uint8Array) }
+
+  const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const rampColors = RAMP.map(hexRgb);
+  const isDark = () => {
+    const t = document.documentElement.getAttribute("data-theme");
+    return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const popcount = (x) => { x >>>= 0; x -= (x >>> 1) & 0x55555555; x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+    return (((x + (x >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24; };
+  const bitsFor = (codes) => { let a = 0, b = 0;
+    for (const i of codes) { if (i < 32) a |= (1 << i); else b |= (1 << (i - 32)); } return [a >>> 0, b >>> 0]; };
+  const fmtArea = (k) => k >= 1e6 ? (k / 1e6).toFixed(1) + " M km²" : Math.round(k / 1000).toLocaleString() + "k km²";
+
+  function loadImg(src) { return new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; }); }
+
+  async function init() {
+    const meta = await (await fetch("species.json")).json();
+    species = meta.species; groups = meta.groups; W = meta.grid.w; H = meta.grid.h; N = species.length;
+    groups.forEach((_, i) => groupOn.add(i));
+    bg.light.src = "bg_light.jpg"; bg.dark.src = "bg_dark.jpg";
+    lo = new Uint32Array(W * H); hi = new Uint32Array(W * H);
+    const off = document.createElement("canvas"); off.width = W; off.height = H;
+    const octx = off.getContext("2d", { willReadFrequently: true });
+    const masks = await Promise.all(species.map((s) => loadImg("masks/" + s.code + ".png")));
+    masks.forEach((im, i) => {
+      octx.clearRect(0, 0, W, H); octx.drawImage(im, 0, 0, W, H);
+      const d = octx.getImageData(0, 0, W, H).data;
+      const arr = i < 32 ? lo : hi, bit = (1 << (i % 32)) >>> 0;
+      for (let p = 0, q = 0; p < W * H; p++, q += 4) if (d[q] > 127) arr[p] = (arr[p] | bit) >>> 0;
+    });
+    await Promise.all([bg.light.decode().catch(() => {}), bg.dark.decode().catch(() => {})]);
+    buildGroups(); buildList(); render(); $("status").hidden = true;
+  }
+
+  // overlay colours for the current view
+  function computeOverlay() {
+    const img = ctx.createImageData(W, H), px = img.data;
+    if (mode === "canopy") {                                     // forest in 2000 (green), lost by the end of the year (amber to red)
+      const F = canopy && canopy.forest, Lc = canopy && canopy.loss.get(year);
+      if (F) for (let p = 0, q = 0; p < W * H; p++, q += 4) {
+        const ls = Lc ? (Lc[p] / 255) ** 2 : 0, fs = (F[p] / 255) ** 2;
+        if (fs <= 0.02 && ls <= 0.01) continue;
+        // forest green underneath; the loss colour laid over it as strongly as the share lost (2% faint, half deep red)
+        const fa = (30 + 170 * fs) / 255, t = ls > 0.01 ? Math.min(1, Math.sqrt(ls) * 1.25) : 0;
+        const c = mix([242, 177, 52], [150, 28, 16], t), la = t ? 0.25 + 0.75 * t : 0;
+        const a = la + fa * (1 - la);
+        px[q] = (c[0] * la + 52 * fa * (1 - la)) / a; px[q + 1] = (c[1] * la + 118 * fa * (1 - la)) / a;
+        px[q + 2] = (c[2] * la + 82 * fa * (1 - la)) / a; px[q + 3] = 255 * a;
+      }
+    } else if (picked.size === 0) {                                     // richness of the groups switched on
+      const [ma, mb] = bitsFor(species.map((s, i) => groupOn.has(s.group) ? i : -1).filter((i) => i >= 0));
+      for (let p = 0, q = 0; p < W * H; p++, q += 4) {
+        const n = popcount(lo[p] & ma) + popcount(hi[p] & mb);
+        if (!n) continue;
+        let k = 0; while (k < TH.length - 1 && n >= TH[k + 1]) k++;
+        const c = rampColors[k];
+        px[q] = c[0]; px[q + 1] = c[1]; px[q + 2] = c[2]; px[q + 3] = 220;
+      }
+    } else {                                                      // the picked species, where they meet darker
+      const ids = [...picked], [ma, mb] = bitsFor(ids), m = ids.length;
+      const col = m === 1 ? hexRgb(groups[species[ids[0]].group].color) : null;
+      for (let p = 0, q = 0; p < W * H; p++, q += 4) {
+        const n = popcount(lo[p] & ma) + popcount(hi[p] & mb);
+        if (!n) continue;
+        let c, a;
+        if (col) { c = col; a = 215; }
+        else { const t = m === 1 ? 1 : (n - 1) / (m - 1); c = mix([214, 160, 72], [92, 36, 72], t); a = 170 + 70 * t; }
+        px[q] = c[0]; px[q + 1] = c[1]; px[q + 2] = c[2]; px[q + 3] = a;
+      }
+    }
+    const o = document.createElement("canvas"); o.width = W; o.height = H; o.getContext("2d").putImageData(img, 0, 0);
+    overlay = o;
+  }
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+
+  // the view: zoom s (1 = whole map, up to 8) and the top-left corner (vx, vy), both in range-grid pixels
+  const view = { s: 1, x: 0, y: 0 };
+  const clampView = () => { view.s = Math.min(8, Math.max(1, view.s));
+    view.x = Math.min(W - W / view.s, Math.max(0, view.x)); view.y = Math.min(H - H / view.s, Math.max(0, view.y)); };
+  function sizeCanvas() {
+    const r = canvas.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const w = Math.round(r.width * dpr), h = Math.round(r.width * dpr * H / W);
+    if (w && (canvas.width !== w || canvas.height !== h)) { canvas.width = w; canvas.height = h; }
+  }
+  function draw() {
+    if (!overlay) return;
+    sizeCanvas();
+    const k = canvas.width / W * view.s;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(k, 0, 0, k, -view.x * k, -view.y * k);
+    const b = isDark() ? bg.dark : bg.light, ok = b.complete && b.naturalWidth;
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    if (ok) ctx.drawImage(b, 0, 0, W, H);
+    ctx.imageSmoothingEnabled = view.s < 2.5;              // zoomed in: the 3.5 km cells stay crisp
+    ctx.globalAlpha = 0.9; ctx.drawImage(overlay, 0, 0, W, H); ctx.globalAlpha = 1;
+    if (!isDark() && ok) { ctx.imageSmoothingEnabled = true; ctx.globalAlpha = 0.22; ctx.globalCompositeOperation = "multiply";   // relief through the colours (light only)
+      ctx.drawImage(b, 0, 0, W, H); ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1; }
+    placeMarker();
+  }
+  function render(recompute = true) {
+    if (recompute) computeOverlay();
+    draw(); renderLegend(); renderPicked(); if (mode === "canopy") renderCanopyText();
+    if (pointIdx !== null) showHere(pointIdx);
+  }
+
+  function renderLegend() {
+    const L = $("legend"); L.replaceChildren();
+    const block = document.createElement("div"); block.className = "legend-block";
+    if (mode === "canopy") {
+      const f = document.createElement("span"); f.className = "dot"; f.style.background = "rgb(52,118,82)";
+      const ft = document.createElement("span"); ft.textContent = "Forest in 2000 (darker = more of the cell)";
+      const ramp = document.createElement("div"); ramp.className = "ramp";
+      for (let i = 0; i < 6; i++) { const sp = document.createElement("span"); sp.style.background = `rgb(${mix([242, 177, 52], [150, 28, 16], i / 5)})`; ramp.append(sp); }
+      const lab = document.createElement("div"); lab.className = "ramp-labels";
+      ["a little", "most"].forEach((t) => { const sp = document.createElement("span"); sp.textContent = t; lab.append(sp); });
+      block.append(ramp, lab);
+      const lt = document.createElement("span"); lt.textContent = `Share of that forest lost by the end of ${year}`;
+      L.append(f, ft, block, lt); return;
+    }
+    if (picked.size === 0) {
+      const ramp = document.createElement("div"); ramp.className = "ramp";
+      RAMP.forEach((c) => { const s = document.createElement("span"); s.style.background = c; ramp.append(s); });
+      const lab = document.createElement("div"); lab.className = "ramp-labels";
+      ["1", "2", "4", "6", "8", "10", "12+"].forEach((t) => { const s = document.createElement("span"); s.textContent = t; lab.append(s); });
+      block.append(ramp, lab);
+      const t = document.createElement("span");
+      const shown = species.filter((s) => groupOn.has(s.group)).length;
+      t.textContent = `Number of species growing here (of the ${shown} in the groups switched on)`;
+      L.append(block, t);
+    } else if (picked.size === 1) {
+      const s = species[[...picked][0]];
+      const sw = document.createElement("span"); sw.className = "dot"; sw.style.background = groups[s.group].color;
+      const t = document.createElement("span"); t.textContent = `${s.common}: about ${fmtArea(s.area_km2)}, meeting ${s.overlaps} of the other 49`;
+      L.append(sw, t);
+    } else {
+      const ramp = document.createElement("div"); ramp.className = "ramp";
+      for (let i = 0; i < 6; i++) { const s = document.createElement("span"); const c = mix([214, 160, 72], [92, 36, 72], i / 5);
+        s.style.background = `rgb(${c})`; ramp.append(s); }
+      const lab = document.createElement("div"); lab.className = "ramp-labels";
+      ["1", String(picked.size)].forEach((t) => { const s = document.createElement("span"); s.textContent = t; lab.append(s); });
+      block.append(ramp, lab);
+      const t = document.createElement("span"); t.textContent = `How many of your ${picked.size} picks grow here (darkest: all of them)`;
+      L.append(block, t);
+    }
+  }
+
+  function renderPicked() {
+    $("clear").disabled = picked.size === 0;
+    $("picked").textContent = picked.size === 0 ? "No species picked: the map shows how many grow in each place."
+      : picked.size === 1 ? "1 species picked. Pick more to see where they meet."
+      : `${picked.size} species picked.`;
+    document.querySelectorAll(".sp").forEach((b) => b.setAttribute("aria-pressed", picked.has(+b.dataset.i) ? "true" : "false"));
+  }
+
+  function buildGroups() {
+    const G = $("groups");
+    groups.forEach((g, gi) => {
+      const b = document.createElement("button"); b.className = "chip on"; b.type = "button"; b.id = "grp-" + gi;
+      const d = document.createElement("span"); d.className = "dot"; d.style.background = g.color;
+      b.append(d, document.createTextNode(g.name)); b.setAttribute("aria-pressed", "true");
+      b.addEventListener("click", () => {
+        if (groupOn.has(gi) && groupOn.size > 1) groupOn.delete(gi); else groupOn.add(gi);
+        G.querySelectorAll(".chip").forEach((c, i) => { c.classList.toggle("on", groupOn.has(i)); c.setAttribute("aria-pressed", groupOn.has(i)); });
+        render();
+      });
+      G.append(b);
+    });
+  }
+
+  function buildList() {
+    const L = $("list"); L.replaceChildren();
+    groups.forEach((g, gi) => {
+      const sec = document.createElement("div"); sec.className = "group";
+      const h = document.createElement("h3");
+      const d = document.createElement("span"); d.className = "dot"; d.style.background = g.color;
+      const sm = document.createElement("small"); sm.textContent = species.filter((s) => s.group === gi).length + " species";
+      h.append(d, document.createTextNode(g.name), sm); sec.append(h);
+      species.forEach((s, i) => {
+        if (s.group !== gi) return;
+        const b = document.createElement("button"); b.className = "sp"; b.type = "button"; b.dataset.i = i; b.id = "sp-" + s.code;
+        b.setAttribute("aria-pressed", "false");
+        const sw = document.createElement("span"); sw.className = "swatch"; sw.style.background = g.color;
+        const nm = document.createElement("span"); nm.className = "names";
+        const c = document.createElement("span"); c.className = "common"; c.textContent = s.common;
+        const l = document.createElement("span"); l.className = "latin"; l.textContent = s.latin;
+        nm.append(c, l);
+        const a = document.createElement("span"); a.className = "area"; a.textContent = fmtArea(s.area_km2);
+        b.append(sw, nm, a);
+        b.addEventListener("click", () => toggle(i));
+        sec.append(b);
+      });
+      L.append(sec);
+    });
+    applyFilter();
+  }
+
+  function toggle(i) { if (picked.has(i)) picked.delete(i); else picked.add(i); render(); }
+
+  function applyFilter() {
+    const f = filter.trim().toLowerCase();
+    document.querySelectorAll(".sp").forEach((b) => {
+      const s = species[+b.dataset.i];
+      b.classList.toggle("dim", !!f && !(s.common.toLowerCase().includes(f) || s.latin.toLowerCase().includes(f) || groups[s.group].name.toLowerCase().includes(f)));
+    });
+  }
+
+  // ── canopy change ─────────────────────────────────────────────────────────────────────────────────────────────
+  async function loadGray(url) {
+    const im = await loadImg(url), c = document.createElement("canvas"); c.width = W; c.height = H;
+    const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(im, 0, 0, W, H);
+    const d = x.getImageData(0, 0, W, H).data, out = new Uint8Array(W * H);
+    for (let p = 0, q = 0; p < W * H; p++, q += 4) out[p] = d[q];
+    return out;
+  }
+  async function ensureCanopy() {
+    if (canopy) return;
+    $("status").hidden = false; $("status").textContent = "Loading canopy change…";
+    const meta = await (await fetch("canopy/canopy.json")).json();
+    canopy = { meta, forest: await loadGray("canopy/forest2000.png"), loss: new Map() };
+    $("status").hidden = true;
+    meta.years.forEach((y) => loadLoss(y).catch(() => {}));      // the rest arrive in the background, ready for Play
+  }
+  const pending = new Map();
+  function loadLoss(y) {
+    if (canopy.loss.has(y)) return Promise.resolve(canopy.loss.get(y));
+    if (!pending.has(y)) pending.set(y, loadGray(`canopy/loss${y}.png`).then((a) => { canopy.loss.set(y, a); return a; }));
+    return pending.get(y);
+  }
+  async function showYear(y) {
+    year = y; $("year").value = y; $("yearlabel").textContent = y;
+    if (mode === "canopy") { await loadLoss(y); if (year === y) render(); }
+  }
+  const fmtKm = (v) => Math.round(v).toLocaleString() + " km²";
+  function renderCanopyText() {
+    if (!canopy) return;
+    const m = canopy.meta, ys = m.years, k = ys.indexOf(year), one = picked.size === 1 ? species[[...picked][0]] : null;
+    const src = one ? m.species[one.code] : m, lossY = src.loss_km2, cum = lossY.slice(0, k + 1).reduce((a, b) => a + b, 0);
+    const where = one ? `inside the ${one.common.toLowerCase()} range` : "across the map";
+    $("losssum").textContent = `${year}: ${fmtKm(lossY[k])} of forest lost ${where}. 2001–${year}: ${fmtKm(cum)}, ` +
+      `${(100 * cum / Math.max(1, src.forest_km2)).toFixed(1)}% of its ${fmtKm(src.forest_km2)} in 2000.` + (one ? "" : " Pick one species to chart its range.");
+    const svg = $("chart"), max = Math.max(...lossY), bw = 560 / ys.length;
+    svg.replaceChildren();
+    const NS = "http://www.w3.org/2000/svg", el = (n, a) => { const e = document.createElementNS(NS, n); for (const [kk, v] of Object.entries(a)) e.setAttribute(kk, v); return e; };
+    ys.forEach((yy, i) => {
+      const h = max ? (lossY[i] / max) * 110 : 0;
+      const r = el("rect", { x: 30 + i * bw + 1, y: 120 - h, width: bw - 2, height: Math.max(h, 0.5),
+        class: "bar" + (yy === year ? " now" : yy > year ? " after" : "") });
+      const t = document.createElementNS(NS, "title"); t.textContent = `${yy}: ${fmtKm(lossY[i])}`; r.append(t); svg.append(r);
+      if (yy % 5 === 0 || yy === 2001 || yy === 2024) { const tx = el("text", { x: 30 + i * bw + bw / 2, y: 138, "text-anchor": "middle" }); tx.textContent = yy; svg.append(tx); }
+    });
+    const tm = el("text", { x: 30, y: 10 }); tm.textContent = `${fmtKm(max)} (largest year)`; svg.append(tm);
+    svg.append(el("line", { x1: 30, x2: 590, y1: 120.5, y2: 120.5, stroke: "currentColor", "stroke-opacity": 0.25 }));
+  }
+  async function setMode(m) {
+    mode = m;
+    $("tab-ranges").setAttribute("aria-selected", m === "ranges"); $("tab-canopy").setAttribute("aria-selected", m === "canopy");
+    $("timebar").hidden = m !== "canopy"; $("groups").hidden = m === "canopy";
+    if (m === "canopy") { try { await ensureCanopy(); await loadLoss(year); }
+      catch (e) { $("status").hidden = false; $("status").textContent = "Canopy change could not load. Reload the page to try again."; return; } }
+    render();
+  }
+  $("tab-ranges").addEventListener("click", () => setMode("ranges"));
+  $("tab-canopy").addEventListener("click", () => setMode("canopy"));
+  $("year").addEventListener("input", (e) => { stopPlay(); showYear(+e.target.value); });
+  let timer = null;
+  const stopPlay = () => { if (timer) { clearInterval(timer); timer = null; $("play").textContent = "Play"; } };
+  $("play").addEventListener("click", () => {
+    if (timer) return stopPlay();
+    if (year >= 2024) showYear(2001);
+    $("play").textContent = "Pause";
+    timer = setInterval(() => { if (year >= 2024) return stopPlay(); showYear(year + 1); }, 650);
+  });
+
+  // what grows at a point
+  function showHere(idx) {
+    const here = $("here"); here.replaceChildren();
+    const ids = species.map((_, i) => i).filter((i) => (i < 32 ? lo[idx] : hi[idx]) & ((1 << (i % 32)) >>> 0));
+    const h = document.createElement("h2");
+    h.textContent = ids.length ? `${ids.length} ${ids.length === 1 ? "species grows" : "species grow"} here` : "None of the 50 grow here";
+    here.append(h);
+    if (mode === "canopy" && canopy) {
+      const fs = (canopy.forest[idx] / 255) ** 2, Lc = canopy.loss.get(year), ls = Lc ? (Lc[idx] / 255) ** 2 : 0;
+      const c = document.createElement("p");
+      c.textContent = fs < 0.02 ? "Little or no forest here in 2000." :
+        `${Math.round(fs * 100)}% of this 3.5 km cell was forest in 2000; ${Math.round(ls * 100)}% of that was lost by the end of ${year}.`;
+      here.append(c);
+    }
+    if (!ids.length) { const p = document.createElement("p"); p.textContent = "Grassland, desert, tundra, ice or water, or trees outside this atlas."; here.append(p); return; }
+    const chips = document.createElement("div"); chips.className = "chips";
+    ids.sort((a, b) => species[a].group - species[b].group || species[a].common.localeCompare(species[b].common));
+    ids.forEach((i) => {
+      const s = species[i], b = document.createElement("button"); b.type = "button"; b.className = "chip" + (picked.has(i) ? " on" : "");
+      const d = document.createElement("span"); d.className = "dot"; d.style.background = groups[s.group].color;
+      b.append(d, document.createTextNode(s.common)); b.title = s.latin;
+      b.addEventListener("click", () => toggle(i));
+      chips.append(b);
+    });
+    const p = document.createElement("p"); p.textContent = "Tap a name to add it to your picks.";
+    here.append(chips, p);
+  }
+  const toGrid = (cx, cy) => { const r = canvas.getBoundingClientRect();
+    return [view.x + (cx - r.left) / r.width * W / view.s, view.y + (cy - r.top) / r.height * H / view.s]; };
+  let pin = null, pinned = false;
+  function pointAt(cx, cy, keep) {
+    const [gx, gy] = toGrid(cx, cy), x = Math.floor(gx), y = Math.floor(gy);
+    if (x < 0 || y < 0 || x >= W || y >= H) return;
+    pointIdx = y * W + x; showHere(pointIdx);
+    if (keep) { pin = [gx, gy]; placeMarker(); }
+  }
+  function placeMarker() {
+    const m = $("marker"); if (!pin) { m.hidden = true; return; }
+    const r = canvas.getBoundingClientRect();
+    const sx = (pin[0] - view.x) * view.s / W * r.width, sy = (pin[1] - view.y) * view.s / H * r.height;
+    m.hidden = sx < 0 || sy < 0 || sx > r.width || sy > r.height; m.style.left = sx + "px"; m.style.top = sy + "px";
+  }
+  function zoomAt(cx, cy, f) {                           // zoom by f keeping the point under (cx, cy) still
+    const [gx, gy] = toGrid(cx, cy), s0 = view.s;
+    view.s = Math.min(8, Math.max(1, s0 * f));
+    view.x = gx - (gx - view.x) * s0 / view.s; view.y = gy - (gy - view.y) * s0 / view.s;
+    clampView(); draw();
+  }
+  const ptrs = new Map(); let drag = null, pinch = null, moved = 0;
+  canvas.addEventListener("pointerdown", (e) => {
+    if (!N) return; canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); moved = 0;
+    if (ptrs.size === 1) drag = { cx: e.clientX, cy: e.clientY, x: view.x, y: view.y };
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()];
+      pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: view.s, mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; drag = null; }
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!N) return;
+    if (ptrs.has(e.pointerId)) {
+      ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      const r = canvas.getBoundingClientRect();
+      if (pinch && ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        zoomAt(pinch.mx, pinch.my, (pinch.s * d / pinch.d) / view.s); moved = 99;
+      } else if (drag) {
+        const dx = e.clientX - drag.cx, dy = e.clientY - drag.cy; moved = Math.max(moved, Math.hypot(dx, dy));
+        if (moved > 4) { canvas.classList.add("dragging");
+          view.x = drag.x - dx / r.width * W / view.s; view.y = drag.y - dy / r.height * H / view.s; clampView(); draw(); }
+      }
+    } else if (!pinned && e.pointerType === "mouse") pointAt(e.clientX, e.clientY, false);
+  });
+  const endPtr = (e) => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.delete(e.pointerId); canvas.classList.remove("dragging");
+    if (ptrs.size < 2) pinch = null;
+    if (ptrs.size === 0) { if (moved <= 4 && e.type === "pointerup") { pinned = true; pointAt(e.clientX, e.clientY, true); } drag = null; }
+  };
+  canvas.addEventListener("pointerup", endPtr); canvas.addEventListener("pointercancel", endPtr);
+  canvas.addEventListener("wheel", (e) => { if (!N) return; e.preventDefault();
+    zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0018))); }, { passive: false });
+  canvas.addEventListener("dblclick", (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, 2); });
+  const center = () => { const r = canvas.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+  $("zin").addEventListener("click", () => zoomAt(...center(), 1.6));
+  $("zout").addEventListener("click", () => zoomAt(...center(), 1 / 1.6));
+  $("zfit").addEventListener("click", () => { view.s = 1; view.x = 0; view.y = 0; draw(); });
+  new ResizeObserver(() => draw()).observe(canvas);
+
+  $("search").addEventListener("input", (e) => { filter = e.target.value; applyFilter(); });
+  $("clear").addEventListener("click", () => { picked.clear(); render(); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => draw());
+  new MutationObserver(() => draw()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  init().catch((err) => { $("status").textContent = "The ranges could not load. Reload the page to try again."; console.error(err); });
+})();
+</script>
+</body>
+</html>
