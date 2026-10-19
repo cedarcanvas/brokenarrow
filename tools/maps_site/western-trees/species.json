@@ -1,0 +1,433 @@
+{
+ "groups": [
+  {
+   "name": "Pines",
+   "color": "#2f5a3c"
+  },
+  {
+   "name": "Douglas-fir and true firs",
+   "color": "#3c6e5f"
+  },
+  {
+   "name": "Spruces, hemlocks and larch",
+   "color": "#2e5f73"
+  },
+  {
+   "name": "Cedars, junipers and redwoods",
+   "color": "#7c5034"
+  },
+  {
+   "name": "Hardwoods",
+   "color": "#a8692a"
+  }
+ ],
+ "species": [
+  {
+   "code": "pinupond",
+   "common": "Ponderosa pine",
+   "latin": "Pinus ponderosa",
+   "group": 0,
+   "area_km2": 688000,
+   "overlaps": 48
+  },
+  {
+   "code": "pinucont",
+   "common": "Lodgepole pine",
+   "latin": "Pinus contorta",
+   "group": 0,
+   "area_km2": 1538000,
+   "overlaps": 49
+  },
+  {
+   "code": "pinulamb",
+   "common": "Sugar pine",
+   "latin": "Pinus lambertiana",
+   "group": 0,
+   "area_km2": 105000,
+   "overlaps": 40
+  },
+  {
+   "code": "pinujeff",
+   "common": "Jeffrey pine",
+   "latin": "Pinus jeffreyi",
+   "group": 0,
+   "area_km2": 79000,
+   "overlaps": 40
+  },
+  {
+   "code": "pinumont",
+   "common": "Western white pine",
+   "latin": "Pinus monticola",
+   "group": 0,
+   "area_km2": 296000,
+   "overlaps": 42
+  },
+  {
+   "code": "pinualbi",
+   "common": "Whitebark pine",
+   "latin": "Pinus albicaulis",
+   "group": 0,
+   "area_km2": 379000,
+   "overlaps": 44
+  },
+  {
+   "code": "pinuflex",
+   "common": "Limber pine",
+   "latin": "Pinus flexilis",
+   "group": 0,
+   "area_km2": 226000,
+   "overlaps": 37
+  },
+  {
+   "code": "pinulong",
+   "common": "Great Basin bristlecone",
+   "latin": "Pinus longaeva",
+   "group": 0,
+   "area_km2": 8000,
+   "overlaps": 19
+  },
+  {
+   "code": "pinuaris",
+   "common": "Rocky Mtn. bristlecone",
+   "latin": "Pinus aristata",
+   "group": 0,
+   "area_km2": 14000,
+   "overlaps": 16
+  },
+  {
+   "code": "pinuedul",
+   "common": "Two-needle pinyon",
+   "latin": "Pinus edulis",
+   "group": 0,
+   "area_km2": 241000,
+   "overlaps": 17
+  },
+  {
+   "code": "pinumono",
+   "common": "Singleleaf pinyon",
+   "latin": "Pinus monophylla",
+   "group": 0,
+   "area_km2": 74000,
+   "overlaps": 34
+  },
+  {
+   "code": "pseumenz",
+   "common": "Douglas-fir",
+   "latin": "Pseudotsuga menziesii",
+   "group": 1,
+   "area_km2": 1032000,
+   "overlaps": 49
+  },
+  {
+   "code": "abielasi",
+   "common": "Subalpine fir",
+   "latin": "Abies lasiocarpa",
+   "group": 1,
+   "area_km2": 1226000,
+   "overlaps": 42
+  },
+  {
+   "code": "abiegran",
+   "common": "Grand fir",
+   "latin": "Abies grandis",
+   "group": 1,
+   "area_km2": 222000,
+   "overlaps": 39
+  },
+  {
+   "code": "abieconc",
+   "common": "White fir",
+   "latin": "Abies concolor",
+   "group": 1,
+   "area_km2": 174000,
+   "overlaps": 45
+  },
+  {
+   "code": "abiemagn",
+   "common": "California red fir",
+   "latin": "Abies magnifica",
+   "group": 1,
+   "area_km2": 30000,
+   "overlaps": 38
+  },
+  {
+   "code": "abieproc",
+   "common": "Noble fir",
+   "latin": "Abies procera",
+   "group": 1,
+   "area_km2": 32000,
+   "overlaps": 32
+  },
+  {
+   "code": "abieamab",
+   "common": "Pacific silver fir",
+   "latin": "Abies amabilis",
+   "group": 1,
+   "area_km2": 174000,
+   "overlaps": 33
+  },
+  {
+   "code": "picesitc",
+   "common": "Sitka spruce",
+   "latin": "Picea sitchensis",
+   "group": 2,
+   "area_km2": 279000,
+   "overlaps": 37
+  },
+  {
+   "code": "piceenge",
+   "common": "Engelmann spruce",
+   "latin": "Picea engelmannii",
+   "group": 2,
+   "area_km2": 691000,
+   "overlaps": 43
+  },
+  {
+   "code": "piceglau",
+   "common": "White spruce",
+   "latin": "Picea glauca",
+   "group": 2,
+   "area_km2": 3593000,
+   "overlaps": 22
+  },
+  {
+   "code": "picemari",
+   "common": "Black spruce",
+   "latin": "Picea mariana",
+   "group": 2,
+   "area_km2": 3532000,
+   "overlaps": 16
+  },
+  {
+   "code": "picepung",
+   "common": "Blue spruce",
+   "latin": "Picea pungens",
+   "group": 2,
+   "area_km2": 78000,
+   "overlaps": 19
+  },
+  {
+   "code": "tsughete",
+   "common": "Western hemlock",
+   "latin": "Tsuga heterophylla",
+   "group": 2,
+   "area_km2": 441000,
+   "overlaps": 38
+  },
+  {
+   "code": "tsugmert",
+   "common": "Mountain hemlock",
+   "latin": "Tsuga mertensiana",
+   "group": 2,
+   "area_km2": 261000,
+   "overlaps": 42
+  },
+  {
+   "code": "lariocci",
+   "common": "Western larch",
+   "latin": "Larix occidentalis",
+   "group": 2,
+   "area_km2": 152000,
+   "overlaps": 27
+  },
+  {
+   "code": "thujplic",
+   "common": "Western redcedar",
+   "latin": "Thuja plicata",
+   "group": 3,
+   "area_km2": 389000,
+   "overlaps": 38
+  },
+  {
+   "code": "libodecu",
+   "common": "Incense-cedar",
+   "latin": "Calocedrus decurrens",
+   "group": 3,
+   "area_km2": 107000,
+   "overlaps": 40
+  },
+  {
+   "code": "chamnoot",
+   "common": "Alaska yellow-cedar",
+   "latin": "Callitropsis nootkatensis",
+   "group": 3,
+   "area_km2": 232000,
+   "overlaps": 34
+  },
+  {
+   "code": "chamlaws",
+   "common": "Port Orford cedar",
+   "latin": "Chamaecyparis lawsoniana",
+   "group": 3,
+   "area_km2": 13000,
+   "overlaps": 28
+  },
+  {
+   "code": "sequsemp",
+   "common": "Coast redwood",
+   "latin": "Sequoia sempervirens",
+   "group": 3,
+   "area_km2": 11000,
+   "overlaps": 29
+  },
+  {
+   "code": "sequgiga",
+   "common": "Giant sequoia",
+   "latin": "Sequoiadendron giganteum",
+   "group": 3,
+   "area_km2": 0,
+   "overlaps": 23
+  },
+  {
+   "code": "junioste",
+   "common": "Utah juniper",
+   "latin": "Juniperus osteosperma",
+   "group": 3,
+   "area_km2": 262000,
+   "overlaps": 28
+  },
+  {
+   "code": "juniscop",
+   "common": "Rocky Mountain juniper",
+   "latin": "Juniperus scopulorum",
+   "group": 3,
+   "area_km2": 546000,
+   "overlaps": 35
+  },
+  {
+   "code": "juniocci",
+   "common": "Western juniper",
+   "latin": "Juniperus occidentalis",
+   "group": 3,
+   "area_km2": 103000,
+   "overlaps": 39
+  },
+  {
+   "code": "poputrem",
+   "common": "Quaking aspen",
+   "latin": "Populus tremuloides",
+   "group": 4,
+   "area_km2": 4180000,
+   "overlaps": 49
+  },
+  {
+   "code": "poputric",
+   "common": "Black cottonwood",
+   "latin": "Populus trichocarpa",
+   "group": 4,
+   "area_km2": 1240000,
+   "overlaps": 49
+  },
+  {
+   "code": "popufrem",
+   "common": "Fremont cottonwood",
+   "latin": "Populus fremontii",
+   "group": 4,
+   "area_km2": 207000,
+   "overlaps": 39
+  },
+  {
+   "code": "betupapy",
+   "common": "Paper birch",
+   "latin": "Betula papyrifera",
+   "group": 4,
+   "area_km2": 3805000,
+   "overlaps": 28
+  },
+  {
+   "code": "alnurubr",
+   "common": "Red alder",
+   "latin": "Alnus rubra",
+   "group": 4,
+   "area_km2": 304000,
+   "overlaps": 40
+  },
+  {
+   "code": "acermacr",
+   "common": "Bigleaf maple",
+   "latin": "Acer macrophyllum",
+   "group": 4,
+   "area_km2": 268000,
+   "overlaps": 42
+  },
+  {
+   "code": "quergarr",
+   "common": "Oregon white oak",
+   "latin": "Quercus garryana",
+   "group": 4,
+   "area_km2": 121000,
+   "overlaps": 40
+  },
+  {
+   "code": "querkell",
+   "common": "California black oak",
+   "latin": "Quercus kelloggii",
+   "group": 4,
+   "area_km2": 80000,
+   "overlaps": 39
+  },
+  {
+   "code": "queragri",
+   "common": "Coast live oak",
+   "latin": "Quercus agrifolia",
+   "group": 4,
+   "area_km2": 56000,
+   "overlaps": 23
+  },
+  {
+   "code": "querloba",
+   "common": "Valley oak",
+   "latin": "Quercus lobata",
+   "group": 4,
+   "area_km2": 92000,
+   "overlaps": 30
+  },
+  {
+   "code": "querdoug",
+   "common": "Blue oak",
+   "latin": "Quercus douglasii",
+   "group": 4,
+   "area_km2": 55000,
+   "overlaps": 30
+  },
+  {
+   "code": "quergamb",
+   "common": "Gambel oak",
+   "latin": "Quercus gambelii",
+   "group": 4,
+   "area_km2": 312000,
+   "overlaps": 17
+  },
+  {
+   "code": "arbumenz",
+   "common": "Pacific madrone",
+   "latin": "Arbutus menziesii",
+   "group": 4,
+   "area_km2": 136000,
+   "overlaps": 39
+  },
+  {
+   "code": "lithdens",
+   "common": "Tanoak",
+   "latin": "Notholithocarpus densiflorus",
+   "group": 4,
+   "area_km2": 28000,
+   "overlaps": 35
+  },
+  {
+   "code": "umbecali",
+   "common": "California bay",
+   "latin": "Umbellularia californica",
+   "group": 4,
+   "area_km2": 79000,
+   "overlaps": 38
+  }
+ ],
+ "grid": {
+  "w": 1400,
+  "h": 1501,
+  "bw": 2800,
+  "bh": 3002,
+  "km_per_px": 3.46
+ }
+}
