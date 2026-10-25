@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>East Troublesome Fire · Ridgeline Maps</title>
+<meta name="description" content="Interactive map of the 2020 East Troublesome Fire in Grand County, Colorado: play back every mapped perimeter, including the overnight run that burned about 87,000 acres.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta property="og:title" content="Eight hours, 87,000 acres: the East Troublesome Fire · Ridgeline Maps">
+<meta property="og:description" content="Play back all 14 mapped perimeters of Colorado's second-largest wildfire, from the first report on Oct. 14, 2020, through the overnight run and the jump across the Continental Divide.">
+<meta property="og:image" content="https://maps.ridgelinemaps.com/previews/east-troublesome.jpg">
+<meta property="og:url" content="https://maps.ridgelinemaps.com/east-troublesome/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --paper: #f6f3ed; --surface: #ffffff; --ink: #2b2724; --muted: #5b5348; --rule: #ddd6c9;
+  --accent: #c2531f; --accent-ink: #ffffff; --chip: #efe9dd;
+  --serif: "Libre Baskerville", Georgia, serif;
+  --sans: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+  /* fire phases, same as the magazine spread */
+  --p1: #7a2516; --p2: #b8462c; --p3: #ea7f24; --p4: #f2a35e; --p5: #f6c79a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #16130f; --surface: #201c17; --ink: #f1ece4; --muted: #b7ad9f; --rule: #3a332b;
+    --accent: #f08a4b; --accent-ink: #1a120b; --chip: #2a241d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #16130f; --surface: #201c17; --ink: #f1ece4; --muted: #b7ad9f; --rule: #3a332b;
+  --accent: #f08a4b; --accent-ink: #1a120b; --chip: #2a241d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); }
+a { color: var(--accent); }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+header { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 12px 40px; margin-bottom: 24px; }
+@media (max-width: 860px) { header { grid-template-columns: minmax(0, 1fr); } }
+.kicker { font: 700 12px/1.3 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 8px; }
+h1 { font: 700 clamp(32px, 5vw, 56px)/1.05 var(--serif); margin: 0 0 12px; letter-spacing: -0.01em; text-wrap: balance; }
+.dek { font: italic 18px/1.45 var(--serif); margin: 0 0 10px; text-wrap: pretty; }
+.byline { font: 600 12px/1.3 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.story { font: 15px/1.6 var(--serif); color: var(--ink); columns: 2 240px; column-gap: 28px; align-self: end; }
+.story p { margin: 0 0 8px; }
+
+/* map */
+.figure { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.mapbox { position: relative; background: #d9d6d0; }
+#map { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+#map.dragging { cursor: grabbing; }
+#map .perim { stroke: rgba(60, 20, 8, 0.35); stroke-width: 2.5; vector-effect: non-scaling-stroke; transition: opacity .35s ease; }
+#map .perim.off { opacity: 0; pointer-events: none; }
+#map .perim.now { stroke: #2b1206; stroke-width: 2; }
+#map .perim.hover { stroke: #ffffff; stroke-width: 2.5; }
+#map .lbl { font-family: var(--sans); fill: #2b2724; paint-order: stroke; stroke: rgba(239, 233, 221, 0.9); stroke-width: 10px; stroke-linejoin: round; pointer-events: none; }
+#map .nonint { pointer-events: none; }
+
+.readout { position: absolute; left: 12px; top: 12px; max-width: min(320px, 60%); padding: 10px 12px 11px;
+  background: rgba(246, 243, 237, 0.92); color: #2b2724; border-radius: 4px; pointer-events: none; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+.readout .when { font: 700 clamp(15px, 2.1vw, 22px)/1.15 var(--serif); }
+.readout .time { font: 500 12px/1.3 var(--sans); color: #5b5348; margin-top: 2px; }
+.readout .acres { font: 600 clamp(14px, 1.8vw, 18px)/1.2 var(--sans); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.readout .bar { height: 6px; background: rgba(0,0,0,.12); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.readout .bar span { display: block; height: 100%; background: #8e2a13; width: 0; transition: width .35s ease; }
+@media (max-width: 560px) {
+  .readout { position: static; max-width: none; border-radius: 0; box-shadow: none; background: var(--surface); color: var(--ink); padding: 10px 16px 4px; }
+  .readout .time { color: var(--muted); }
+  .zoom { right: 6px; top: 6px; gap: 3px; }
+  .zoom button { width: 28px; height: 28px; font-size: 15px; }
+}
+
+.zoom { position: absolute; right: 10px; top: 10px; display: grid; gap: 4px; }
+.zoom button { width: 34px; height: 34px; display: grid; place-items: center; font: 600 18px/1 var(--sans); color: #2b2724;
+  background: rgba(246, 243, 237, 0.92); border: 1px solid rgba(0,0,0,.18); border-radius: 4px; cursor: pointer; }
+.zoom .fit { font-size: 10px; letter-spacing: 0.04em; }
+.zoom button:hover, .zoom button:focus-visible { border-color: #2b2724; }
+
+.tip { position: absolute; z-index: 3; pointer-events: none; padding: 7px 9px; max-width: 230px;
+  background: #2b2724; color: #f6f3ed; font: 13px/1.35 var(--sans); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+.tip b { display: block; font-weight: 600; }
+
+/* controls */
+.controls { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 10px 12px; align-items: center; padding: 14px 16px 6px; }
+.btn { font: 600 14px/1 var(--sans); padding: 9px 14px; border-radius: 4px; border: 1px solid var(--rule); background: var(--chip); color: var(--ink); cursor: pointer; }
+.btn:hover, .btn:focus-visible { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); min-width: 78px; }
+.step-nav { display: flex; gap: 4px; }
+.step-nav .btn { padding: 9px 11px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.count { font: 500 13px/1 var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 560px) { .controls { grid-template-columns: auto auto minmax(0, 1fr); } .count { display: none; } }
+
+.below { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px 32px; padding: 8px 16px 18px; }
+@media (max-width: 860px) { .below { grid-template-columns: minmax(0, 1fr); } }
+.note { font: 16px/1.55 var(--serif); margin: 0; min-height: 5em; text-wrap: pretty; }
+.note b { font-family: var(--sans); font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 12px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 14px; border-radius: 2px; display: inline-block; }
+.hint { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+.chartbox h2 { font: 700 12px/1.3 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 6px; }
+#chart { display: block; width: 100%; height: auto; overflow: visible; }
+#chart text { font: 11px var(--sans); fill: var(--muted); }
+#chart .grid { stroke: var(--rule); }
+#chart .line { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+#chart .dot { cursor: pointer; }
+#chart .dot circle { fill: var(--surface); stroke: var(--ink); stroke-width: 1.5; }
+#chart .dot.done circle { fill: var(--ink); }
+#chart .dot.now circle { fill: var(--accent); stroke: var(--accent); }
+#chart .dot:focus-visible circle { stroke: var(--accent); stroke-width: 3; }
+#chart .run { fill: var(--accent); opacity: 0.15; }
+#chart .runlbl { fill: var(--accent); font-weight: 600; }
+
+section.more { margin-top: 40px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; }
+@media (max-width: 860px) { section.more { grid-template-columns: minmax(0, 1fr); } }
+section.more h2 { font: 700 22px/1.2 var(--serif); margin: 0 0 6px; }
+section.more p { margin: 0 0 12px; color: var(--muted); }
+video, .spread img { display: block; width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--rule); background: #000; }
+.spread img { background: #fff; }
+
+.sources { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
+.sources h2 { font: 700 12px/1.3 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 6px; color: var(--ink); }
+.sources p { margin: 0 0 6px; max-width: 110ch; }
+.promo { margin-top: 32px; padding: 20px 22px; border-radius: 6px; background: var(--surface); border: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+.promo h2 { font: 700 18px/1.25 var(--serif); margin: 0 0 4px; }
+.promo p { margin: 0; color: var(--muted); font-size: 14px; max-width: 60ch; }
+.promo .links { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; font-size: 14px; }
+.buy { background: #F0C030; color: #1a1a1a; font-weight: 600; text-decoration: none; padding: 9px 16px; border-radius: 6px; }
+.buy:hover, .buy:focus-visible { filter: brightness(0.95); text-decoration: underline; }
+
+/* shared Ridgeline Maps bar */
+.rm-bar {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 16px;
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: #2b2724; color: #f6f3ed; font: 500 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.rm-bar a { color: #f6f3ed; text-decoration: none; }
+.rm-bar a:hover, .rm-bar a:focus-visible { text-decoration: underline; }
+.rm-bar nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rm-bar { background: #0d0b09; } }
+:root[data-theme="dark"] .rm-bar { background: #0d0b09; }
+@media (prefers-reduced-motion: reduce) { #map .perim, .readout .bar span { transition: none; } }
+</style>
+<meta name="google-adsense-account" content="ca-pub-6023845895987273">
+<!-- Google AdSense (Auto ads). Ad placement is controlled in the AdSense dashboard. -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6023845895987273" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="rm-bar"><a href="../">&larr; All interactive maps</a><nav aria-label="Ridgeline Maps"><a href="https://ridgelinemaps.com/store">Shop map prints</a><a href="https://ridgelinemaps.com/custom-maps">Custom maps</a><a href="https://ridgelinemaps.com">ridgelinemaps.com</a></nav></div>
+
+<div class="wrap">
+  <header>
+    <div>
+      <p class="kicker">Wildfire &middot; Grand County, Colorado &middot; October 2020</p>
+      <h1>Eight hours, 87,000 acres</h1>
+      <p class="dek">On the night of Oct. 21, 2020, the East Troublesome Fire tore east through Grand County, then jumped the Continental Divide. It became the second-largest wildfire in Colorado history.</p>
+      <p class="byline">Map and graphics by Mike Floyd, Ridgeline Maps</p>
+    </div>
+    <div class="story">
+      <p>A hunter reported smoke north of Kremmling on Oct. 14. For a week the fire spread through bone-dry forest, and by the morning of Oct. 21 it covered about 19,000 acres.</p>
+      <p>That day brought a red flag warning. Overnight the fire burned about 87,000 acres and reached Grand Lake. By Oct. 22, embers had crossed the Divide. Snow on Oct. 25 and 26 finally stopped it.</p>
+    </div>
+  </header>
+
+  <div class="figure">
+    <div class="mapbox" id="mapbox">
+      <svg id="map" viewBox="0 0 3840 2160" role="img" aria-labelledby="maptitle">
+        <title id="maptitle">Map of the East Troublesome Fire perimeters between Granby, Grand Lake and Estes Park</title>
+        <image href="basemap.jpg" x="0" y="0" width="3840" height="2160" class="nonint"/>
+        <g id="lakes" class="nonint"></g>
+        <g id="perims"></g>
+        <g id="refs" class="nonint"></g>
+        <g id="labels" class="nonint"></g>
+      </svg>
+      <div class="readout" aria-live="polite">
+        <div class="when" id="when">Loading the perimeters…</div>
+        <div class="time" id="time"></div>
+        <div class="acres" id="acres"></div>
+        <div class="bar"><span id="bar"></span></div>
+      </div>
+      <div class="zoom">
+        <button type="button" id="zin" aria-label="Zoom in">+</button>
+        <button type="button" id="zout" aria-label="Zoom out">−</button>
+        <button type="button" id="zfit" class="fit" aria-label="Show the whole map">ALL</button>
+      </div>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+
+    <div class="controls">
+      <button class="btn primary" type="button" id="play">Play</button>
+      <div class="step-nav">
+        <button class="btn" type="button" id="prev" aria-label="Previous perimeter">&lsaquo;</button>
+        <button class="btn" type="button" id="next" aria-label="Next perimeter">&rsaquo;</button>
+      </div>
+      <input type="range" id="step" min="1" max="14" step="1" value="14" aria-label="Mapped perimeter">
+      <span class="count" id="count"></span>
+    </div>
+
+    <div class="below">
+      <div>
+        <p class="note" id="note"></p>
+        <ul class="legend" aria-label="Colors">
+          <li><i style="background:var(--p1)"></i>Oct. 15–21, morning</li>
+          <li><i style="background:var(--p2)"></i>Oct. 21, daytime</li>
+          <li><i style="background:var(--p3)"></i>Overnight, Oct. 21–22</li>
+          <li><i style="background:var(--p4)"></i>Oct. 22</li>
+          <li><i style="background:var(--p5)"></i>Oct. 23–30</li>
+        </ul>
+        <p class="hint">Hover or tap the burn to see when each part caught fire. Scroll or pinch to zoom, drag to move.</p>
+      </div>
+      <div class="chartbox">
+        <h2>Acres burned, by mapped perimeter</h2>
+        <svg id="chart" viewBox="0 0 460 190" role="group" aria-label="Acres burned at each mapped perimeter. Select a point to show that perimeter."></svg>
+      </div>
+    </div>
+  </div>
+
+  <section class="more">
+    <div>
+      <h2>The animation</h2>
+      <p>The same perimeters as a 30-second animated map, with wind readings from two weather stations before each mapped perimeter.</p>
+      <video controls preload="none" playsinline poster="poster.jpg" width="1280" height="720">
+        <source src="etf-animation.mp4" type="video/mp4">
+        Your browser can't play this video. <a href="etf-animation.mp4">Download the MP4</a>.
+      </video>
+    </div>
+    <div class="spread">
+      <h2>The magazine spread</h2>
+      <p>A two-page print layout of the overnight run, with an acreage chart and the wind at Granby airport through the whole fire.</p>
+      <a href="spread.jpg"><img src="spread.jpg" width="1800" height="1087" loading="lazy" alt="Two-page magazine spread titled Eight hours, 87,000 acres, with a large map of the fire colored by day, a chart of acres burned and a chart of wind at Granby airport"></a>
+    </div>
+  </section>
+
+  <section class="sources">
+    <h2>Sources</h2>
+    <p>Fire perimeters: National Interagency Fire Center, Operational Data Archive 2020. Acres for each perimeter are measured from the mapped shapes and differ from official figures by less than 0.1%; the official final total is 193,812 acres. Times are Mountain Daylight Time, when each perimeter was mapped.</p>
+    <p>Imagery: contains modified Copernicus Sentinel data (July 10, 2020). Elevation: USGS 3D Elevation Program. Lakes: USGS National Hydrography Dataset via Esri. Park boundary: National Park Service. Wind (animation and spread): FAA ASOS and CDOT via Iowa Environmental Mesonet. Fire facts: National Park Service, National Weather Service via Sky-Hi News, Denver7.</p>
+  </section>
+
+  <section class="promo" aria-label="Prints and custom maps">
+    <div>
+      <h2>Need a map like this?</h2>
+      <p>Ridgeline Maps makes custom maps of fires, avalanches, trails and the places you care about, for print, web and video.</p>
+    </div>
+    <div class="links">
+      <a class="buy" href="https://ridgelinemaps.com/custom-maps">Commission a custom map</a>
+      <a href="https://ridgelinemaps.com/store">Shop map prints</a>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const NS = "http://www.w3.org/2000/svg";
+  const W = 3840, H = 2160;
+  const $ = (id) => document.getElementById(id);
+  const map = $("map"), tip = $("tip"), box = $("mapbox");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Phase of each mapped perimeter (1-14), matching the legend
+  const PHASE = [0, 1,1,1,1,1,1,1, 2,2, 3, 4, 5,5,5];
+  const COLOR = ["", "#7a2516", "#b8462c", "#ea7f24", "#f2a35e", "#f6c79a"];
+  const OFFICIAL_FINAL = 193812;
+
+  const NOTES = {
+    1: "A hunter reported smoke north of Kremmling on Oct. 14. The next day's first mapped perimeter covers about <b>3,700 acres</b>.",
+    2: "For a week the fire spreads through bone-dry forest, growing a few thousand acres a day.",
+    3: "The fire doubles in a day, to about <b>11,300 acres</b>.",
+    4: "Growth slows: about 1,300 acres in a day.",
+    5: "Still about <b>13,000 acres</b> on the morning of Oct. 19.",
+    6: "About <b>15,500 acres</b> by the morning of Oct. 20.",
+    7: "By the morning of Oct. 21 the fire covers about <b>19,000 acres</b>. A red flag warning is up for the day: gusts of 55 to 60 mph and humidity in the single digits.",
+    8: "By afternoon the fire races east across <b>Highway 125</b>. It has grown by more than 11,000 acres since dawn.",
+    9: "At 9:25 p.m. the fire covers about <b>39,000 acres</b>. The overnight run is under way.",
+    10: "Between 9:25 p.m. and 5:50 a.m. the fire burns about <b>87,000 acres</b>, roughly 10,000 an hour. Fire clouds tower 40,000 feet and make their own lightning. By morning it has reached Grand Lake.",
+    11: "Embers cross the <b>Continental Divide</b> into the east side of Rocky Mountain National Park, toward Estes Park. Two residents near Grand Lake die in the fire.",
+    12: "Growth slows. This perimeter includes the spot fire east of the Divide.",
+    13: "About <b>192,000 acres</b>. Growth has nearly stopped: about 4,300 acres in a day.",
+    14: "Up to a foot of snow on Oct. 25 and 26 finally stopped the spread. Final perimeter: <b>193,812 acres</b>, the second-largest wildfire in Colorado history. It destroyed 555 structures, 366 of them homes."
+  };
+
+  let D, cur = 14, timer = null;
+  const paths = [];
+
+  const fmt = (n) => n.toLocaleString("en-US");
+  const acresOf = (i) => i === 14 ? OFFICIAL_FINAL : D.per[i - 1].acres;
+  function when(p) {
+    // "2020-10-21 18:50 MDT" -> { day: "Wednesday, Oct. 21, 2020", time: "6:50 p.m." }
+    const [, mo, dd, hh, mm] = p.mt_time.match(/\d{4}-(\d\d)-(\d\d) (\d\d):(\d\d)/).map(Number);
+    const dt = new Date(Date.UTC(2020, mo - 1, dd));
+    const wd = dt.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+    const h12 = ((hh + 11) % 12) + 1, ap = hh < 12 ? "a.m." : "p.m.";
+    return { day: `${wd}, Oct. ${dd}`, time: `${h12}:${String(mm).padStart(2, "0")} ${ap}`, t: Date.UTC(2020, mo - 1, dd, hh + 6, mm) };
+  }
+  const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+
+  function label(text, x, y, size, opts = {}) {
+    const t = el("text", { x, y, class: "lbl", "font-size": size, "text-anchor": opts.anchor || "start", ...(opts.attrs || {}) }, $("labels"));
+    if (opts.style) t.setAttribute("style", opts.style);
+    t.textContent = text;
+    return t;
+  }
+
+  function build() {
+    el("path", { d: D.lakes, fill: "#9fc8e2", stroke: "#7fb0d0", "stroke-width": 2 }, $("lakes"));
+    // Draw the largest perimeter first so earlier ones sit on top: the top shape under the pointer is the earliest burn there.
+    for (let i = 14; i >= 1; i--) {
+      const p = D.per[i - 1];
+      const path = el("path", { d: p.d, fill: COLOR[PHASE[i]], "fill-rule": "evenodd", class: "perim", "data-step": i }, $("perims"));
+      paths[i] = path;
+    }
+    const refs = $("refs");
+    el("path", { d: D.rmnp, fill: "none", stroke: "#3f6b47", "stroke-width": 5, "stroke-dasharray": "16 12", opacity: 0.85 }, refs);
+    el("path", { d: D.roads, fill: "none", stroke: "#ffffff", "stroke-width": 6, "stroke-linejoin": "round", opacity: 0.9 }, refs);
+    el("path", { d: D.divide, fill: "none", stroke: "#5b5348", "stroke-width": 5, "stroke-dasharray": "2 12", "stroke-linecap": "round" }, refs);
+    for (const t of D.towns) el("circle", { cx: t.x, cy: t.y, r: 12, fill: "#2b2724", stroke: "#efe9dd", "stroke-width": 5 }, refs);
+    const sh = [["Colorado_125", 1172, 398], ["US_40", 1280, 1783], ["US_34", 2006, 1296], ["US_36", 3224, 335], ["Colorado_7", 3419, 913]];
+    for (const [n, x, y] of sh) el("image", { href: `shields/${n}.svg`, x: x - 34, y: y - 34, width: 68, height: 68 }, refs);
+
+    const T = Object.fromEntries(D.towns.map((t) => [t.name, t]));
+    label("Granby", T["Granby"].x - 26, T["Granby"].y - 30, 50, { anchor: "end" });
+    label("Grand Lake", T["Grand Lake"].x + 28, T["Grand Lake"].y + 16, 50);
+    label("Hot Sulphur Springs", T["Hot Sulphur Springs"].x + 28, T["Hot Sulphur Springs"].y + 16, 50);
+    label("Estes Park", T["Estes Park"].x - 40, T["Estes Park"].y + 74, 50, { anchor: "middle" });
+    label("Lake", 2069, 1392, 46, { anchor: "middle", style: "font-family: var(--serif); font-style: italic; fill:#2f5f84" });
+    label("Granby", 2069, 1446, 46, { anchor: "middle", style: "font-family: var(--serif); font-style: italic; fill:#2f5f84" });
+    label("ROCKY MOUNTAIN", 3175, 1180, 36, { anchor: "middle", style: "letter-spacing: 6px; fill:#3f6b47" });
+    label("NATIONAL PARK", 3175, 1224, 36, { anchor: "middle", style: "letter-spacing: 6px; fill:#3f6b47" });
+    label("CONTINENTAL DIVIDE", 2850, 560, 32, { anchor: "middle", attrs: { transform: "rotate(74 2850 560)" }, style: "letter-spacing: 8px; fill:#5b5348" });
+  }
+
+  function show(i) {
+    cur = i;
+    for (let k = 1; k <= 14; k++) {
+      paths[k].classList.toggle("off", k > i);
+      paths[k].classList.toggle("now", k === i);
+    }
+    const p = D.per[i - 1], w = when(p);
+    $("when").textContent = i === 14 ? "Final perimeter" : w.day;
+    $("time").textContent = i === 14 ? "Main fire Oct. 30, east side Nov. 1" : `Perimeter mapped ${w.time}`;
+    $("acres").textContent = `${fmt(acresOf(i))} acres`;
+    $("bar").style.width = `${(100 * acresOf(i) / OFFICIAL_FINAL).toFixed(1)}%`;
+    $("note").innerHTML = NOTES[i];
+    $("count").textContent = `${i} of 14`;
+    $("step").value = i;
+    $("step").setAttribute("aria-valuetext", `${i === 14 ? "Final" : w.day + ", " + w.time}: ${fmt(acresOf(i))} acres`);
+    document.querySelectorAll("#chart .dot").forEach((d) => {
+      const s = +d.dataset.step;
+      d.classList.toggle("done", s < i);
+      d.classList.toggle("now", s === i);
+      d.setAttribute("aria-pressed", s === i ? "true" : "false");
+    });
+  }
+
+  // ---- chart
+  function chart() {
+    const c = $("chart"), L = 46, R = 444, T = 14, B = 160;
+    const t0 = Date.UTC(2020, 9, 15), t1 = Date.UTC(2020, 9, 31);
+    const x = (t) => L + (R - L) * (t - t0) / (t1 - t0), y = (a) => B - (B - T) * a / 200000;
+    for (const a of [0, 50000, 100000, 150000, 200000]) {
+      el("line", { x1: L, x2: R, y1: y(a), y2: y(a), class: "grid" }, c);
+      el("text", { x: L - 6, y: y(a) + 4, "text-anchor": "end" }, c).textContent = a ? `${a / 1000}K` : "0";
+    }
+    for (let d = 15; d <= 31; d += 2) el("text", { x: x(Date.UTC(2020, 9, d)), y: B + 16, "text-anchor": "middle" }, c).textContent = d === 15 ? "Oct. 15" : d;
+    const pts = D.per.map((p, k) => [x(when(p).t), y(acresOf(k + 1))]);
+    const r9 = pts[8], r10 = pts[9];
+    el("rect", { x: r9[0], y: T, width: Math.max(3, r10[0] - r9[0]), height: B - T, class: "run" }, c);
+    const lbl = el("text", { x: r10[0] + 8, y: y(80000), class: "runlbl" }, c);
+    lbl.textContent = "+87,000 acres overnight";
+    el("path", { d: "M" + pts.map((q) => q.join(",")).join(" L"), class: "line" }, c);
+    pts.forEach(([px, py], k) => {
+      const g = el("g", { class: "dot", tabindex: 0, role: "button", "data-step": k + 1,
+        "aria-label": `${k === 13 ? "Final" : when(D.per[k]).day + ", " + when(D.per[k]).time}: ${fmt(acresOf(k + 1))} acres` }, c);
+      el("circle", { cx: px, cy: py, r: 10, fill: "transparent", stroke: "none" }, g);
+      el("circle", { cx: px, cy: py, r: 4.5 }, g);
+      g.addEventListener("click", () => { stop(); show(k + 1); });
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); stop(); show(k + 1); } });
+    });
+    // The hit circle shouldn't take the dot styling
+    c.querySelectorAll(".dot circle:first-child").forEach((n) => n.setAttribute("style", "fill:transparent;stroke:none"));
+  }
+
+  // ---- play
+  function stop() { clearTimeout(timer); timer = null; $("play").textContent = "Play"; }
+  function play() {
+    if (timer) return stop();
+    if (cur >= 14) show(1);
+    $("play").textContent = "Pause";
+    const tick = () => {
+      if (cur >= 14) return stop();
+      show(cur + 1);
+      timer = setTimeout(tick, cur === 9 || cur === 10 ? 2200 : 1100);
+    };
+    timer = setTimeout(tick, reduce ? 1600 : 1100);
+  }
+  $("play").addEventListener("click", play);
+  $("prev").addEventListener("click", () => { stop(); show(Math.max(1, cur - 1)); });
+  $("next").addEventListener("click", () => { stop(); show(Math.min(14, cur + 1)); });
+  $("step").addEventListener("input", (e) => { stop(); show(+e.target.value); });
+
+  // ---- tooltip: the top shape under the pointer is the earliest perimeter that covers that spot
+  let hovered = null;
+  function hideTip() { tip.hidden = true; if (hovered) hovered.classList.remove("hover"); hovered = null; }
+  function showTip(e) {
+    const t = e.target.closest && e.target.closest(".perim");
+    if (!t || t.classList.contains("off")) return hideTip();
+    if (hovered !== t) { if (hovered) hovered.classList.remove("hover"); hovered = t; t.classList.add("hover"); }
+    const i = +t.dataset.step, p = D.per[i - 1], w = when(p);
+    const prev = i > 1 ? when(D.per[i - 2]) : null;
+    tip.innerHTML = i === 1
+      ? `<b>Burned by Oct. 15, 11:50 a.m.</b>Inside the first mapped perimeter.`
+      : i === 14
+        ? `<b>Burned Oct. 24–Nov. 1</b>Added in the last days before snow and containment.`
+        : `<b>Burned by ${w.day.replace(/^\w+, /, "")}, ${w.time}</b>Between the ${prev.day.replace(/^\w+, /, "")}, ${prev.time} and ${w.day.replace(/^\w+, /, "")}, ${w.time} perimeters.`;
+    const r = box.getBoundingClientRect();
+    tip.hidden = false;
+    const tx = Math.min(e.clientX - r.left + 14, r.width - tip.offsetWidth - 6);
+    const ty = e.clientY - r.top + 16 + tip.offsetHeight > r.height ? e.clientY - r.top - tip.offsetHeight - 12 : e.clientY - r.top + 16;
+    tip.style.left = `${Math.max(6, tx)}px`; tip.style.top = `${ty}px`;
+  }
+  map.addEventListener("pointermove", (e) => { if (!drag) showTip(e); });
+  map.addEventListener("pointerleave", hideTip);
+
+  // ---- zoom and pan on the viewBox
+  let vb = { x: 0, y: 0, w: W, h: H }, drag = null;
+  const pointers = new Map();
+  function setVB() {
+    vb.w = Math.min(W, Math.max(W / 8, vb.w)); vb.h = vb.w * H / W;
+    vb.x = Math.min(W - vb.w, Math.max(0, vb.x)); vb.y = Math.min(H - vb.h, Math.max(0, vb.y));
+    map.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  }
+  function zoomAt(f, cx, cy) {
+    // cx, cy are fractions of the visible map (0-1)
+    const nx = vb.x + cx * vb.w, ny = vb.y + cy * vb.h;
+    vb.w *= f; vb.h = vb.w * H / W;
+    vb.x = nx - cx * vb.w; vb.y = ny - cy * vb.h; setVB();
+  }
+  map.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const r = map.getBoundingClientRect();
+    zoomAt(Math.exp(e.deltaY * 0.0015), (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+  }, { passive: false });
+  map.addEventListener("pointerdown", (e) => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y, moved: false, dist: null };
+    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; drag.dist = Math.hypot(a.x - b.x, a.y - b.y); }
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (!drag || !pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const r = map.getBoundingClientRect();
+    if (pointers.size === 2 && drag.dist) {
+      const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      zoomAt(drag.dist / d, ((a.x + b.x) / 2 - r.left) / r.width, ((a.y + b.y) / 2 - r.top) / r.height);
+      drag.dist = d; drag.moved = true; return;
+    }
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+    if (!drag.moved) { drag.moved = true; map.classList.add("dragging"); map.setPointerCapture(e.pointerId); hideTip(); }
+    vb.x = drag.vx - dx * vb.w / r.width; vb.y = drag.vy - dy * vb.h / r.height; setVB();
+  });
+  const end = (e) => {
+    pointers.delete(e.pointerId);
+    if (drag && !drag.moved && e.type === "pointerup" && e.pointerType !== "mouse") showTip(e);
+    if (pointers.size === 0) { drag = null; map.classList.remove("dragging"); }
+  };
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+  $("zin").addEventListener("click", () => zoomAt(0.6, 0.5, 0.5));
+  $("zout").addEventListener("click", () => zoomAt(1 / 0.6, 0.5, 0.5));
+  $("zfit").addEventListener("click", () => { vb = { x: 0, y: 0, w: W, h: H }; setVB(); });
+
+  fetch("etf.json").then((r) => r.json()).then((d) => {
+    D = d; build(); chart(); show(14);
+  }).catch(() => { $("when").textContent = "The map data didn't load. Try reloading the page."; });
+})();
+</script>
+</body>
+</html>
