@@ -79,17 +79,31 @@ jobs:
           ls -la raw/usps
 
       - name: Build map data
+        # Made-up demo days are used ONLY when asked for (Run workflow -> demo).
+        # If the USPS files are missing or can't be read, the build stops here, nothing
+        # is deployed, and the live site keeps its last good USPS data. GitHub emails
+        # you about the failed run.
         run: |
-          if [ "${{ inputs.demo }}" = "true" ] || ! find raw/usps -type f ! -iname 'readme.md' ! -iname 'columns.json' ! -iname 'vintage.txt' ! -name '.*' | grep -q .; then
-            echo "::warning::No USPS service-standard files in raw/usps - building with DEMO days."
+          if [ "${{ inputs.demo }}" = "true" ]; then
+            echo "::warning::Demo requested - building with made-up DEMO days."
             python build/build_data.py --demo-days
-          elif ! python build/build_data.py; then
-            # On pull requests, fail loudly so the problem gets fixed. On main, keep the
-            # site up with demo days (and its banner) rather than publishing nothing.
-            if [ "${{ github.event_name }}" = "pull_request" ]; then exit 1; fi
-            echo "::warning::Could not read the USPS files - building with DEMO days. See the log above."
-            python build/build_data.py --demo-days
+          elif ! find raw/usps -type f ! -iname 'readme.md' ! -iname 'columns.json' ! -iname 'vintage.txt' ! -name '.*' | grep -q .; then
+            echo "::error::No USPS service-standard files in raw/usps. Not deploying, so the live map keeps its last good data."
+            exit 1
+          else
+            python build/build_data.py
           fi
+
+      - name: Check the map is not using demo data
+        run: |
+          python - <<'PY'
+          import json, sys
+          meta = json.load(open("web/data/meta.json"))
+          if meta.get("demo") and "${{ inputs.demo }}" != "true":
+              print("::error::meta.json says demo=true but demo was not requested. Not deploying.")
+              sys.exit(1)
+          print("USPS data:", meta.get("vintage"), "| demo:", meta.get("demo"))
+          PY
 
       - name: Add USPS on-time performance (optional)
         # Quarterly district results from about.usps.com; never fails the build.
