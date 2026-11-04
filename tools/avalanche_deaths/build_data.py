@@ -2,7 +2,8 @@
 """Turn the CAIC US avalanche accident spreadsheet into data for the map page.
 
 Reads the "Data" sheet of the Colorado Avalanche Information Center's accident
-workbook, tidies it, links each avalanche to its accident report where one is
+workbook, adds the rows in raw/recent_accidents.csv for winters the workbook doesn't
+have yet, tidies it, links each avalanche to its accident report where one is
 published (raw/reports_caic.json and raw/reports_uac.json, from fetch_reports.py),
 and writes it into the page between its <script id="accident-data"> tags, so the
 page stays one self-contained file.
@@ -27,6 +28,7 @@ from report_links import match
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_PAGE = HERE.parent / "maps_site" / "avalanche-deaths" / "index.html"
+RECENT = HERE / "raw" / "recent_accidents.csv"
 
 # CAIC's 24 activity types, folded into 7 groups for the charts. Every type in
 # the workbook must be listed here; the script stops if it finds a new one.
@@ -75,6 +77,15 @@ def tidy_text(value):
     return text or None
 
 
+def recent_rows(newest):
+    """Rows of raw/recent_accidents.csv for winters after `newest`, the workbook's last winter."""
+    if not RECENT.exists():
+        return None
+    df = pd.read_csv(RECENT, parse_dates=["Date"])
+    df[["lat", "lon"]] = df[["lat", "lon"]].fillna(0)  # no coordinates, as in the workbook
+    return df[df.AvyYear > newest]
+
+
 def report_links(df, ordered):
     """For each row (in page order), the accident reports published for it: [[source, url], ...]."""
     rows = [{
@@ -83,6 +94,10 @@ def report_links(df, ordered):
         "desc": tidy_text(r.Description) or "",
     } for r in df.itertuples()]
     links = {r.Index: [] for r in df.itertuples()}
+    # Rows from recent_accidents.csv come from a CAIC report, so they already have their link.
+    given = {r.Index: r.Report for r in df.itertuples() if isinstance(getattr(r, "Report", None), str)}
+    for i, url in given.items():
+        links[i].append(["caic", url])
     for source in ("caic", "uac"):
         path = HERE / "raw" / f"reports_{source}.json"
         if not path.exists():
@@ -96,10 +111,16 @@ def report_links(df, ordered):
             r.setdefault("lat", None)
             r.setdefault("lon", None)
         url = {r["id"]: r["url"] for r in reports}
-        found = match([dict(row) for row in rows], reports)
+        total = len(reports)
+        if source == "caic":
+            reports = [r for r in reports if r["url"] not in given.values()]
+        pool = [dict(row) for row in rows if source != "caic" or row["i"] not in given]
+        found = match(pool, reports)
         for i, rid in found.items():
             links[i].append([source, url[rid]])
-        print(f"Reports:   {len(found)} rows linked to {len(set(found.values()))} of {len(reports)} {source.upper()} reports")
+        if source == "caic":
+            found.update(given)
+        print(f"Reports:   {len(found)} rows linked to {len(set(found.values()))} of {total} {source.upper()} reports")
     return [links[i] or None for i in ordered]
 
 
@@ -118,12 +139,15 @@ def main() -> int:
     page = Path(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_PAGE
 
     df = pd.read_excel(workbook, sheet_name="Data")
+    recent = recent_rows(int(df.AvyYear.max()))
+    if recent is not None and len(recent):
+        df = pd.concat([df, recent], ignore_index=True)
     unknown = sorted(set(df["PrimaryActivity"]) - set(GROUP_OF))
     if unknown:
         print(f"New activity types, add them to GROUPS: {unknown}", file=sys.stderr)
         return 2
 
-    ordered = df.sort_values("Date", ascending=False)
+    ordered = df.sort_values("Date", ascending=False, kind="stable")
     reports = report_links(df, list(ordered.index))
     rows = []
     for r, links in zip(ordered.itertuples(), reports):
@@ -145,8 +169,10 @@ def main() -> int:
             links,                                # [[source, url], ...] or None
         ])
 
+    added = sorted(set(recent.AvyYear)) if recent is not None else []
     data = {
         "source": f"Colorado Avalanche Information Center (CAIC), {workbook.name}",
+        "added": [int(s) for s in added],          # winters added from recent_accidents.csv
         "fields": ["season", "date", "location", "state", "lat", "lon", "group", "activity", "travel",
                    "killed", "description", "reports"],
         "groups": list(GROUPS),
@@ -163,6 +189,8 @@ def main() -> int:
 
     located = sum(1 for row in rows if row[4] is not None)
     print(f"Workbook:  {workbook.name}")
+    if added:
+        print(f"Added:     {len(recent)} rows from {RECENT.name}, winter{'s' if len(added) > 1 else ''} {', '.join(f'{s - 1}-{str(s)[2:]}' for s in added)}")
     print(f"Accidents: {len(rows)}  ({located} with map coordinates)")
     print(f"Killed:    {sum(row[9] for row in rows)}")
     print(f"Linked:    {sum(1 for row in rows if row[11])} accidents have a report link")

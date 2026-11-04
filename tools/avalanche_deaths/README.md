@@ -5,7 +5,8 @@ https://maps.ridgelinemaps.com/avalanche-deaths/).
 
 The map is one self-contained HTML page. The accident records live inside it, in the
 `<script id="accident-data">` block, and `build_data.py` writes that block from the
-Colorado Avalanche Information Center's accident workbook.
+Colorado Avalanche Information Center's accident workbook, plus `raw/recent_accidents.csv`
+for any winter the workbook doesn't have yet.
 
 ## Updating with a new CAIC workbook
 
@@ -23,6 +24,8 @@ CAIC publishes an updated workbook each fall.
 
    It downloads CAIC's list of fatal accident reports into `raw/reports_caic.json` and reads the
    saved Utah page into `raw/reports_uac.json`. Skip the Utah step and it keeps last year's list.
+   It also adds draft rows to `raw/recent_accidents.csv` (see below) for any fatal accidents
+   newer than the workbook.
 3. Build the page:
 
    ```
@@ -37,7 +40,33 @@ CAIC publishes an updated workbook each fall.
    of the seven groups in `GROUPS` at the top of the script and run it again.
 
 Everything on the page (totals, the opening paragraph, the timeline range, the "Last 10
-winters" button) is computed from the data, so nothing else needs editing.
+winters" button) is computed from the data. The page's description tags, the fallback
+numbers in its HTML and the card on the maps home page are written in by hand, so update
+those to match the summary.
+
+## Before CAIC's workbook catches up
+
+CAIC lists each winter's fatal accidents at https://avalanche.state.co.us/accidents/us
+months before its downloadable workbook has them (in November 2026 the workbook still
+ended with the 2024-25 winter). `fetch_reports.py` turns those reports into rows of
+`raw/recent_accidents.csv`, in the workbook's columns plus `Report`, the CAIC report link.
+`build_data.py` adds the rows for winters after the workbook's last one and skips the rest,
+so once a new workbook covers a winter its rows here stop being used and can be deleted.
+
+The draft rows guess `PrimaryActivity` and `TravelMode` from the report's one-line
+summary and leave guides, clients and mixed groups blank. Check each new row against its
+report and fill in the blanks (the build stops if an activity is missing or new):
+
+- Use CAIC's activity names (the ones listed in `GROUPS` in `build_data.py`).
+- When one avalanche killed people from different activities, split it into one row per
+  activity with that activity's deaths, as the workbook does. The Castle Peak avalanche of
+  February 17, 2026, for example, is two rows: 3 human-powered guides and 6 backcountry
+  tourers. CAIC's statistics page (https://avalanche.state.co.us/accidents/statistics-and-reporting)
+  shows deaths by activity, which helps confirm a split.
+- Leave `TravelMode` blank when the report doesn't say, or when the group travelled different ways.
+
+The page treats rows with the same date, state and place as one avalanche for the dots, the
+counts and the list.
 
 ## Accident report links
 
@@ -50,8 +79,9 @@ Each avalanche links to its published accident report where one exists:
 
 The workbook doesn't record report IDs, so `report_links.py` matches reports to rows by state,
 date, place name, coordinates and number killed. A link is left off when the match is uncertain:
-date and deaths alone count only when it was the state's only fatal avalanche that day. In the
-October 2025 workbook, 603 of 1,016 avalanches get a link, including 343 of the 345 since 2009-10.
+date and deaths alone count only when it was the state's only fatal avalanche that day. Rows from
+`recent_accidents.csv` already carry their CAIC link. With the October 2025 workbook and the
+2025-26 winter added, 613 of 1,022 avalanches get a link, including 357 of the 359 since 2009-10.
 
 ## Shaded relief and mountain names
 
