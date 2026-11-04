@@ -7,10 +7,14 @@
   scripts, so open https://utahavalanchecenter.org/avalanches/fatalities in your browser,
   save it (File > Save Page As) as raw/uac_fatalities.html, and run this. Without that
   file the existing reports_uac.json is kept.
+- raw/recent_accidents.csv: CAIC lists each winter's accidents online months before its
+  workbook has them. Fatal reports from winters newer than the workbook are added here as
+  draft rows, in the workbook's columns. Check them before building (see the README).
 
 Usage:
     fetch_reports.py
 """
+import csv
 import html
 import json
 import re
@@ -24,6 +28,14 @@ HERE = Path(__file__).resolve().parent
 RAW = HERE / "raw"
 CAIC_API = "https://api.avalanche.state.co.us/api/v2/reports"
 UAC_PAGE = RAW / "uac_fatalities.html"
+RECENT = RAW / "recent_accidents.csv"
+RECENT_FIELDS = ["AvyYear", "Date", "Location", "State", "lat", "lon", "PrimaryActivity", "TravelMode", "Killed",
+                 "Description", "Report"]
+# Draft rows guess the activity and travel mode from the report's involvement summary
+# ("1 snowmobiler caught, buried, and killed"). Guides, clients and mixed groups are left blank.
+ACTIVITY_WORDS = [("snowbik", "Snowbiker", "Snowbike"), ("snowmobil", "Snowmobiler", "Snowmobile"),
+                  ("sidecountry", "Sidecountry Rider", ""), ("patroller", "Ski Patroller", ""),
+                  ("climber", "Climber", ""), ("hiker", "Hiker", ""), ("backcountry tour", "Backcountry Tourer", "")]
 
 # Hours behind UTC (standard time) for turning CAIC's timestamps into local dates.
 UTC_OFFSET = {"AK": 9, "WA": 8, "OR": 8, "CA": 8, "NV": 8, "NH": 5, "NY": 5, "ME": 5, "VT": 5}
@@ -76,6 +88,51 @@ def fetch_caic():
     return out
 
 
+def winter(day):
+    """The winter a date falls in, named by its spring, as the workbook does: Oct 2025 to Sep 2026 is 2026."""
+    return day.year + (day.month >= 10)
+
+
+def draft_recent(caic):
+    """Add draft rows to raw/recent_accidents.csv for fatal reports from winters the workbook doesn't have yet."""
+    import pandas as pd
+    from build_data import edition
+
+    books = sorted(RAW.glob("*.xlsx"), key=edition)
+    if not books:
+        print("  no workbook in raw/, so no recent accidents to add")
+        return
+    newest = int(pd.read_excel(books[-1], sheet_name="Data").AvyYear.max())
+    have = []
+    if RECENT.exists():
+        with RECENT.open(newline="", encoding="utf-8") as f:
+            have = list(csv.DictReader(f))
+    known = {row["Report"] for row in have}
+    new = []
+    for r in sorted(caic, key=lambda r: r["date"]):
+        day = datetime.fromisoformat(r["date"])
+        if winter(day) <= newest or r["url"] in known:
+            continue
+        inv = r["inv"].lower()
+        activity, travel = next(((a, t) for word, a, t in ACTIVITY_WORDS if word in inv), ("", ""))
+        if not travel:
+            travel = "Snowboard" if "snowboard" in inv else "Ski" if "skier" in inv else ""
+        new.append({"AvyYear": winter(day), "Date": r["date"], "Location": r["loc"].strip(), "State": r["state"],
+                    "lat": r["lat"] or 0, "lon": r["lon"] or 0, "PrimaryActivity": activity, "TravelMode": travel,
+                    "Killed": r["killed"], "Description": " ".join(r["inv"].split()), "Report": r["url"]})
+    if not new:
+        print(f"  no new fatal reports after the {books[-1].name} winters")
+        return
+    with RECENT.open("w", newline="", encoding="utf-8") as f:
+        out = csv.DictWriter(f, RECENT_FIELDS)
+        out.writeheader()
+        out.writerows(have + new)
+    print(f"  added {len(new)} draft rows to raw/{RECENT.name}; check their activity and travel mode:")
+    for row in new:
+        print(f"    {row['Date']} {row['State']} {row['Location']}: {row['Killed']} killed,"
+              f" activity {row['PrimaryActivity'] or '(blank)'}, travel {row['TravelMode'] or '(blank)'}")
+
+
 def parse_uac(page_html):
     out = []
     for row in re.findall(r"<tr[^>]*>(.*?)</tr>", page_html, re.S):
@@ -106,6 +163,7 @@ def main() -> int:
     caic = fetch_caic()
     (RAW / "reports_caic.json").write_text(json.dumps(caic, ensure_ascii=False, indent=0), encoding="utf-8")
     print(f"  saved {len(caic)} fatal reports to raw/reports_caic.json")
+    draft_recent(caic)
 
     print("Utah Avalanche Center:")
     if UAC_PAGE.exists():
