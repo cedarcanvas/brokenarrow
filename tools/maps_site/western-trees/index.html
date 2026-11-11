@@ -13,39 +13,45 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=Public+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: a field atlas spread - the map plate on the left, the species register on the right; stacked on phones. */
+/* Layout: a field atlas spread - the map plate on the left, the species register on the right; stacked on phones.
+   Ridgeline Maps house style: warm paper and ink, Libre Baskerville for headings and Latin names, Libre Franklin
+   for everything else, coral for the kicker and links. Selected tabs and chips are drawn in ink, so nothing in
+   the page chrome competes with the map's greens or the red and orange of forest loss. */
 :root {
-  --paper: #f4f2ec; --plate: #e9e6dc; --ink: #15211d; --muted: #56635d; --rule: #d3d0c4;
-  --accent: #2f7553; --accent-ink: #ffffff; --chip: #ebe8de; --loss: #b8321f; --lossbar: #d98a4e;
-  --display: "Spectral", "Hoefler Text", Georgia, serif;
-  --ui: "Public Sans", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+  --paper: #f6f3ed; --plate: #ece7dd; --surface: #ffffff; --ink: #2b2724; --muted: #5b5348; --rule: #ddd6c9;
+  --accent: #2b2724; --accent-ink: #f6f3ed; --coral: #c2531f; --chip: #efe9dd; --loss: #b8321f; --lossbar: #d98a4e;
+  --display: "Libre Baskerville", Georgia, serif;
+  --ui: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #121815; --plate: #1a221e; --ink: #e6ebe4; --muted: #9aa69f; --rule: #2e3833;
-    --accent: #7fc196; --accent-ink: #0d1411; --chip: #202a25; --loss: #ef6a4a; --lossbar: #a8603a; color-scheme: dark;
+    --paper: #16130f; --plate: #201c17; --surface: #201c17; --ink: #f1ece4; --muted: #b7ad9f; --rule: #3a332b;
+    --accent: #f1ece4; --accent-ink: #16130f; --coral: #f08a4b; --chip: #2a241d; --loss: #ef6a4a; --lossbar: #a8603a; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #121815; --plate: #1a221e; --ink: #e6ebe4; --muted: #9aa69f; --rule: #2e3833;
-  --accent: #7fc196; --accent-ink: #0d1411; --chip: #202a25; --loss: #ef6a4a; --lossbar: #a8603a; color-scheme: dark;
+  --paper: #16130f; --plate: #201c17; --surface: #201c17; --ink: #f1ece4; --muted: #b7ad9f; --rule: #3a332b;
+  --accent: #f1ece4; --accent-ink: #16130f; --coral: #f08a4b; --chip: #2a241d; --loss: #ef6a4a; --lossbar: #a8603a; color-scheme: dark;
 }
+a { color: var(--coral); }
+[hidden] { display: none !important; } /* the year box and group chips are hidden per view; display rules below would show them */
 body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--ui); font-size: 15px; line-height: 1.45; }
 .wrap { max-width: 1440px; margin: 0 auto; padding-block: 28px 40px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-header { display: grid; gap: 6px; margin-bottom: 20px; }
-h1 { font-family: var(--display); font-weight: 400; font-size: clamp(30px, 4.2vw, 50px); letter-spacing: 0.02em;
-  line-height: 1.05; margin: 0; text-wrap: balance; }
-.lede { color: var(--muted); max-width: 68ch; margin: 0; font-size: 16px; }
+header { display: grid; gap: 4px; margin-bottom: 22px; }
+.kicker { font: 700 12px/1.3 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--coral); margin: 0 0 4px; }
+h1 { font: 700 clamp(32px, 5vw, 56px)/1.05 var(--display); letter-spacing: -.01em; margin: 0 0 8px; text-wrap: balance; }
+.lede { font: italic 18px/1.5 var(--display); max-width: 64ch; margin: 0 0 6px; text-wrap: pretty; }
+.byline { font: 600 12px/1.3 var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
 .spread { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; align-items: start; }
 @media (max-width: 900px) { .spread { grid-template-columns: minmax(0, 1fr); } }
 
 /* the map plate */
 .plate { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); display: grid; gap: 12px; min-width: 0; }
 @media (max-width: 900px) { .plate { position: static; } }
-.mapbox { position: relative; background: var(--plate); border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.mapbox { position: relative; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
 canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-ratio: 1400 / 1501; cursor: crosshair; touch-action: none; }
 canvas.dragging { cursor: grabbing; }
 .zoom { position: absolute; right: 12px; top: 12px; display: grid; gap: 4px; }
@@ -55,12 +61,12 @@ canvas.dragging { cursor: grabbing; }
 .zoom .fit { font-size: 11px; letter-spacing: 0.04em; }
 .hint { font-size: 12px; color: var(--muted); }
 .tabs { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; width: fit-content; max-width: 100%; }
-.tabs button { background: transparent; color: var(--ink); border: 0; padding: 8px 14px; font-size: 14px; }
+.tabs button { background: var(--chip); color: var(--ink); border: 0; padding: 8px 14px; font-size: 14px; font-weight: 600; }
 .tabs button + button { border-left: 1px solid var(--rule); }
 .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
-.timebar { display: grid; gap: 8px; background: var(--plate); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 14px; }
+.timebar { display: grid; gap: 8px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; }
 .timebar .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.year { font-family: var(--display); font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; min-width: 3.2ch; }
+.year { font: 700 26px/1 var(--display); font-variant-numeric: tabular-nums; min-width: 3.2ch; }
 .timebar input[type=range] { flex: 1 1 180px; min-width: 0; accent-color: var(--accent); }
 .timebar .sub { font-size: 13px; color: var(--muted); }
 .chart { width: 100%; height: auto; display: block; }
@@ -77,8 +83,8 @@ canvas.dragging { cursor: grabbing; }
 .ramp span { width: 26px; }
 .ramp-labels { display: flex; justify-content: space-between; width: 100%; font-variant-numeric: tabular-nums; }
 .legend-block { display: grid; gap: 3px; }
-.here { background: var(--plate); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 14px; display: grid; gap: 8px; }
-.here h2 { margin: 0; font-family: var(--display); font-weight: 600; font-size: 18px; }
+.here { background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; display: grid; gap: 8px; }
+.here h2 { margin: 0; font: 700 17px/1.25 var(--display); }
 .here p { margin: 0; color: var(--muted); font-size: 14px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
@@ -91,7 +97,7 @@ canvas.dragging { cursor: grabbing; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .picked { font-size: 13px; color: var(--muted); }
 button { font: inherit; cursor: pointer; }
-.btn { background: var(--chip); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; padding: 6px 12px; font-size: 13px; }
+.btn { background: var(--chip); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; padding: 7px 12px; font-size: 13px; font-weight: 600; }
 .btn:hover { border-color: var(--muted); }
 .btn[disabled] { opacity: 0.45; cursor: default; }
 .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--chip); color: var(--ink);
@@ -100,8 +106,8 @@ button { font: inherit; cursor: pointer; }
 .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .group { display: grid; gap: 2px; }
-.group h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-family: var(--display); font-weight: 600; font-size: 19px; }
-.group h3 small { font-family: var(--ui); font-weight: 400; font-size: 12px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.group h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font: 700 18px/1.25 var(--display); }
+.group h3 small { font: 700 11px var(--ui); color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
 .sp { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: baseline; gap: 4px 10px; width: 100%;
   text-align: left; background: transparent; color: var(--ink); border: 0; border-bottom: 1px solid var(--rule); padding: 8px 6px; }
 .sp:hover { background: var(--chip); }
@@ -109,22 +115,32 @@ button { font: inherit; cursor: pointer; }
 .sp .swatch { width: 12px; height: 12px; border-radius: 2px; align-self: center; }
 .sp .names { min-width: 0; }
 .sp .common { font-weight: 600; font-size: 14px; }
+.sp .common, .sp .latin { overflow-wrap: anywhere; }
 .sp .latin { font-family: var(--display); font-style: italic; color: var(--muted); font-size: 14px; margin-left: 6px; }
 .sp .area { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sp.dim { opacity: 0.38; }
-footer { margin-top: 28px; color: var(--muted); font-size: 12px; max-width: 90ch; }
+.sources { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
+.sources h2 { font: 700 12px/1.3 var(--ui); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 6px; color: var(--ink); }
+.sources p { margin: 0 0 6px; max-width: 110ch; }
+.promo { margin-top: 28px; padding: 20px 22px; border-radius: 6px; background: var(--surface); border: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+.promo h2 { font: 700 18px/1.25 var(--display); margin: 0 0 4px; }
+.promo p { margin: 0; color: var(--muted); font-size: 14px; max-width: 60ch; }
+.promo .links { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; font-size: 14px; }
+.buy { background: #F0C030; color: #1a1a1a; font-weight: 600; text-decoration: none; padding: 9px 16px; border-radius: 6px; }
+.buy:hover, .buy:focus-visible { filter: brightness(.95); text-decoration: underline; }
 @media (prefers-reduced-motion: no-preference) { canvas { transition: opacity .2s; } }
 /* Site bar, shared with the other maps */
 .rm-bar {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; align-items: center;
   padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  background: #15211d; color: #e9eee9; font: 500 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #2b2724; color: #f6f3ed; font: 500 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-.rm-bar a { color: #e9eee9; text-decoration: none; }
+.rm-bar a { color: #f6f3ed; text-decoration: none; }
 .rm-bar a:hover, .rm-bar a:focus-visible { text-decoration: underline; }
 .rm-bar nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rm-bar { background: #0b100e; } }
-:root[data-theme="dark"] .rm-bar { background: #0b100e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rm-bar { background: #0d0b09; } }
+:root[data-theme="dark"] .rm-bar { background: #0d0b09; }
 </style>
 </head>
 <body>
@@ -132,8 +148,10 @@ footer { margin-top: 28px; color: var(--muted); font-size: 12px; max-width: 90ch
 
 <div class="wrap">
   <header>
+    <p class="kicker">Trees &middot; Western North America &middot; 50 native species</p>
     <h1>Western Trees Atlas</h1>
     <p class="lede">Fifty primary native trees of western North America, from interior Alaska to the Mexican border. Pick a species to see where it grows, pick several to see where they meet, or point at the map to see which trees share that place.</p>
+    <p class="byline">Map and graphics by Mike Floyd, Ridgeline Maps</p>
   </header>
 
   <div class="spread">
@@ -182,7 +200,21 @@ footer { margin-top: 28px; color: var(--muted); font-size: 12px; max-width: 90ch
     </section>
   </div>
 
-  <footer>Canopy change: Hansen et al. 2013, <i>Science</i> 342; Global Forest Change 2000–2024 v1.12, University of Maryland / Google, CC BY 4.0. Forest is canopy cover of 30% or more in 2000; loss is stand-replacing loss of that canopy, from fire, logging, insects, wind or disease, summed to the 3.5 km grid. Ranges: E. L. Little Jr., <i>Atlas of United States Trees</i> (USDA Forest Service, 1971–1977), digitized by the USGS; the Rocky Mountain bristlecone is clipped to its range east of the Great Basin. They show where each tree grows, not present forest cover. Base map: Natural Earth. Lambert conformal conic projection, 3.5 km grid. © 2026 Ridgeline Maps.</footer>
+  <section class="sources">
+    <h2>Sources</h2>
+    <p>Canopy change: Hansen et al. 2013, <i>Science</i> 342; Global Forest Change 2000–2024 v1.12, University of Maryland / Google, CC BY 4.0. Forest is canopy cover of 30% or more in 2000; loss is stand-replacing loss of that canopy, from fire, logging, insects, wind or disease, summed to the 3.5 km grid. Ranges: E. L. Little Jr., <i>Atlas of United States Trees</i> (USDA Forest Service, 1971–1977), digitized by the USGS; the Rocky Mountain bristlecone is clipped to its range east of the Great Basin. They show where each tree grows, not present forest cover. Base map: Natural Earth. Lambert conformal conic projection, 3.5 km grid. © 2026 Ridgeline Maps.</p>
+  </section>
+
+  <section class="promo" aria-label="Prints and custom maps">
+    <div>
+      <h2>Need a map like this?</h2>
+      <p>Ridgeline Maps makes custom maps of forests, fires, trails and the places you care about, for print, web and video.</p>
+    </div>
+    <div class="links">
+      <a class="buy" href="https://ridgelinemaps.com/custom-maps">Commission a custom map</a>
+      <a href="https://ridgelinemaps.com/store">Shop map prints</a>
+    </div>
+  </section>
 </div>
 
 <script>

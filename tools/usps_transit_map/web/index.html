@@ -6,14 +6,19 @@
 <title>USPS Delivery Days</title>
 <meta name="description" content="Hover over any ZIP code to see how many days USPS takes to deliver letters and packages to every other ZIP code in the U.S.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
   <div class="title">
+    <p class="kicker">Mail &middot; United States &middot; USPS service standards</p>
     <h1>USPS Delivery Days</h1>
     <p class="sub">Hover over a ZIP code to see its mail plant's area (red) and delivery days to the rest of the country.
       Click once for the origin, again for the destination.</p>
+    <p class="rm-links"><a href="../">&larr; All interactive maps</a><span aria-hidden="true"> · </span><a href="https://ridgelinemaps.com">ridgelinemaps.com</a></p>
   </div>
   <div class="controls">
     <div class="classes" role="radiogroup" aria-label="Mail class" id="classes"></div>
@@ -158,7 +163,17 @@
         are shown in separate boxes, each at its own scale.</li>
     </ul>
   </details>
-  <p class="credit">Made by <a href="https://ridgelinemaps.com">Ridgeline Maps</a> · <span id="vintage"></span></p>
+  <p class="credit">Map by Mike Floyd, <a href="https://ridgelinemaps.com">Ridgeline Maps</a> · <span id="vintage"></span></p>
+  <section class="promo" aria-label="Prints and custom maps">
+    <div>
+      <h2>Need a map like this?</h2>
+      <p>Ridgeline Maps makes custom maps of networks, trails and the places you care about, for print, web and video.</p>
+    </div>
+    <div class="links">
+      <a class="buy" href="https://ridgelinemaps.com/custom-maps">Commission a custom map</a>
+      <a href="https://ridgelinemaps.com/store">Shop map prints</a>
+    </div>
+  </section>
 </footer>
 
 <script src="vendor/d3.min.js"></script>

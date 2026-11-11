@@ -1,24 +1,30 @@
+/* Ridgeline Maps house style: warm paper and ink, Libre Baskerville for headings, Libre Franklin for
+   everything else, coral links. Selected buttons are ink, so nothing in the page chrome competes with
+   the delivery-day greens and blues or the magenta, red and orange marks on the map. */
 :root {
   color-scheme: light;
-  --page: #f6f5f1;
-  --surface: #fcfcfb;
-  --ink: #0b0b0b;
-  --ink-2: #5b6b7e;
-  --muted: #898781;
-  --title: #002868;
-  --hair: #e1e0d9;
-  --border: rgba(11, 11, 11, 0.10);
-  --accent: #002868;
-  --accent-ink: #ffffff;
-  --map-bg: #e9eef2;
-  --land: #e9e9e7;
-  --none: #bdbdbd;
+  --page: #f6f3ed;
+  --surface: #ffffff;
+  --ink: #2b2724;
+  --ink-2: #5b5348;
+  --muted: #857a6c;
+  --title: #2b2724;
+  --hair: #e7e1d6;
+  --border: rgba(43, 39, 36, 0.14);
+  --accent: #2b2724;
+  --accent-ink: #f6f3ed;
+  --link: #c2531f;
+  --serif: "Libre Baskerville", Georgia, serif;
+  --sans: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+  --map-bg: #ebe7df;
+  --land: #f1eee8;
+  --none: #bdb6aa;
   --line-zip3: rgba(80, 30, 10, 0.22);
   --line-zcta: rgba(80, 30, 10, 0.12);
-  --line-state: rgba(11, 11, 11, 0.8);
+  --line-state: rgba(43, 39, 36, 0.8);
   --line-state-halo: rgba(255, 255, 255, 0.55);
-  --empty: #dfe2e0;            /* land with no ZIP code */
-  --empty-line: rgba(11, 11, 11, 0.13);
+  --empty: #e3ded4;            /* land with no ZIP code */
+  --empty-line: rgba(43, 39, 36, 0.14);
   --halo: #ffffff;
   /* Delivery-day classes (ColorBrewer GnBu, 7 classes), light = fast, dark blue = slow */
   --d1: #f0f9e8; --d2: #ccebc5; --d3: #a8ddb5; --d4: #7bccc4;
@@ -27,44 +33,45 @@
   --plant: #e8000b; /* mail-plant service area outline, same in both themes */
   --hub: #d95f0e;   /* plant markers, same in both themes */
   /* On-time meters: one blue ramp (validated --ordinal), in its own panel */
-  --m0: #184f95; --m1: #3987e5; --m3: #86b6ef; --mtrack: #e6e5df; --mnat: #0b0b0b;
+  --m0: #184f95; --m1: #3987e5; --m3: #86b6ef; --mtrack: #e6e0d4; --mnat: #2b2724;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --page: #0f1215;
-    --surface: #171b20;
-    --ink: #ffffff;
-    --ink-2: #b9c2cc;
-    --muted: #8a9198;
-    --title: #ffffff;
-    --hair: #2c3036;
-    --border: rgba(255, 255, 255, 0.10);
-    --accent: #6da7ec;
-    --accent-ink: #0b0b0b;
-    --map-bg: #171b20;
-    --land: #2f343b;
-    --none: #6b6e73;
-    --line-zip3: rgba(23, 27, 32, 0.8);
-    --line-zcta: rgba(23, 27, 32, 0.45);
-    --line-state: rgba(255, 255, 255, 0.85);
-    --line-state-halo: rgba(11, 11, 11, 0.5);
-    --empty: #23272d;
-    --empty-line: rgba(255, 255, 255, 0.09);
+    --page: #16130f;
+    --surface: #201c17;
+    --ink: #f1ece4;
+    --ink-2: #b7ad9f;
+    --muted: #908676;
+    --title: #f1ece4;
+    --hair: #3a332b;
+    --border: rgba(241, 236, 228, 0.12);
+    --accent: #f1ece4;
+    --accent-ink: #16130f;
+    --link: #f08a4b;
+    --map-bg: #201c17;
+    --land: #2c2620;
+    --none: #6e665b;
+    --line-zip3: rgba(22, 19, 15, 0.8);
+    --line-zcta: rgba(22, 19, 15, 0.45);
+    --line-state: rgba(241, 236, 228, 0.85);
+    --line-state-halo: rgba(13, 11, 9, 0.5);
+    --empty: #221e19;
+    --empty-line: rgba(241, 236, 228, 0.09);
     --dest: #f06aa8;
-    --halo: #0b0b0b;
-    --m0: #9ec5f4; --m1: #3987e5; --m3: #1c5cab; --mtrack: #2a2e34; --mnat: #ffffff;
+    --halo: #0d0b09;
+    --m0: #9ec5f4; --m1: #3987e5; --m3: #1c5cab; --mtrack: #2a241d; --mnat: #f1ece4;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0f1215; --surface: #171b20; --ink: #ffffff; --ink-2: #b9c2cc; --muted: #8a9198;
-  --title: #ffffff; --hair: #2c3036; --border: rgba(255, 255, 255, 0.10);
-  --accent: #6da7ec; --accent-ink: #0b0b0b; --map-bg: #171b20; --land: #2f343b; --none: #6b6e73;
-  --line-zip3: rgba(23, 27, 32, 0.8); --line-zcta: rgba(23, 27, 32, 0.45);
-  --line-state: rgba(255, 255, 255, 0.85); --line-state-halo: rgba(11, 11, 11, 0.5);
-  --empty: #23272d; --empty-line: rgba(255, 255, 255, 0.09); --dest: #f06aa8; --halo: #0b0b0b;
-  --m0: #9ec5f4; --m1: #3987e5; --m3: #1c5cab; --mtrack: #2a2e34; --mnat: #ffffff;
+  --page: #16130f; --surface: #201c17; --ink: #f1ece4; --ink-2: #b7ad9f; --muted: #908676;
+  --title: #f1ece4; --hair: #3a332b; --border: rgba(241, 236, 228, 0.12);
+  --accent: #f1ece4; --accent-ink: #16130f; --link: #f08a4b; --map-bg: #201c17; --land: #2c2620; --none: #6e665b;
+  --line-zip3: rgba(22, 19, 15, 0.8); --line-zcta: rgba(22, 19, 15, 0.45);
+  --line-state: rgba(241, 236, 228, 0.85); --line-state-halo: rgba(13, 11, 9, 0.5);
+  --empty: #221e19; --empty-line: rgba(241, 236, 228, 0.09); --dest: #f06aa8; --halo: #0d0b09;
+  --m0: #9ec5f4; --m1: #3987e5; --m3: #1c5cab; --mtrack: #2a241d; --mnat: #f1ece4;
 }
 
 * { box-sizing: border-box; }
@@ -72,21 +79,31 @@ html, body { margin: 0; }
 body {
   background: var(--page);
   color: var(--ink);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  font: 15px/1.45 var(--sans);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
-a { color: var(--accent); }
+a { color: var(--link); }
 button, input { font: inherit; color: inherit; }
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .muted { color: var(--muted); }
+
+/* Studio box, shared with the other maps */
+.promo { margin-top: 16px; padding: 18px 20px; border-radius: 6px; background: var(--surface); border: 1px solid var(--hair);
+  display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; color: var(--ink); }
+.promo h2 { font: 700 18px/1.25 var(--serif); margin: 0 0 4px; }
+.promo p { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 60ch; }
+.promo .links { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; font-size: 14px; }
+.buy { background: #F0C030; color: #1a1a1a; font-weight: 600; text-decoration: none; padding: 9px 16px; border-radius: 6px; }
+.buy:hover, .buy:focus-visible { filter: brightness(.95); text-decoration: underline; }
 
 .top {
   display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between;
   padding: 16px 20px 12px;
 }
-h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-spacing: -0.01em; }
+.kicker { margin: 0 0 4px; font: 700 12px/1.3 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--link); }
+h1 { margin: 0; font: 700 28px/1.1 var(--serif); color: var(--title); letter-spacing: -0.01em; }
 .sub { margin: 4px 0 0; color: var(--ink-2); }
 .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 
@@ -148,7 +165,7 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .side { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; align-self: start; }
 .origin { border-bottom: 1px solid var(--hair); padding-bottom: 12px; margin-bottom: 12px; position: relative; }
 .origin .muted { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
-.origin-zip { font-size: 30px; font-weight: 650; line-height: 1.15; font-variant-numeric: tabular-nums; color: var(--title); }
+.origin-zip { font-size: 30px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; color: var(--title); }
 .origin-meta { color: var(--ink-2); font-size: 13px; }
 .unpin {
   position: absolute; right: 0; top: 0; border: 1px solid var(--border); background: none; border-radius: 7px;
@@ -200,12 +217,19 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .trip { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
 .trip label { padding: 0 2px 0 10px; color: var(--ink-2); font-size: 14px; }
 .trip input { border: 0; background: none; padding: 6px 6px; width: 9em; outline: none; font-variant-numeric: tabular-nums; }
+/* Phones: the controls stack at the screen's width instead of running off its edge. */
+@media (max-width: 820px) {
+  .top { display: block; }
+  .controls { display: grid; gap: 8px; margin-top: 10px; }
+  .controls > * { min-width: 0; }
+  .trip input { flex: 1 1 0; min-width: 0; width: auto; }
+}
 .trip input + label { border-left: 1px solid var(--hair); }
 .trip button { border: 0; border-left: 1px solid var(--border); background: none; padding: 6px 12px; cursor: pointer; color: var(--ink-2); }
 .trip button:hover { color: var(--ink); background: var(--hair); }
 .trip:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
 .tripcard { border-bottom: 1px solid var(--hair); padding-bottom: 12px; margin-bottom: 12px; position: relative; }
-.tripcard .route { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--title); }
+.tripcard .route { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--title); }
 .tripcard .route .to { color: var(--dest); }
 .tripcard .big { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; margin: 6px 0 2px; }
 .tripcard .big .sw { width: 16px; height: 16px; }
@@ -239,11 +263,11 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .readout { border-bottom: 1px solid var(--hair); padding-bottom: 12px; margin-bottom: 12px; position: relative; min-height: 64px; }
 .readout p { margin: 4px 0 0; font-size: 13px; }
 .readout .cap { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
-.readout .route { font-size: 18px; font-weight: 650; color: var(--title); }
+.readout .route { font-size: 18px; font-weight: 700; color: var(--title); }
 .readout .route .to { color: var(--dest); }
 .readout .route .city { font-size: 13px; font-weight: 500; color: var(--ink-2); }
 .readout .cities { font-size: 13px; color: var(--ink-2); }
-.readout .hero { display: flex; align-items: center; gap: 8px; font-size: 26px; font-weight: 650; margin: 6px 0 0; color: var(--ink); line-height: 1.15; }
+.readout .hero { display: flex; align-items: center; gap: 8px; font-size: 26px; font-weight: 700; margin: 6px 0 0; color: var(--ink); line-height: 1.15; }
 .readout .hero .sw { width: 18px; height: 18px; border-radius: 4px; }
 .readout .clear { position: absolute; right: 0; top: 0; border: 1px solid var(--border); background: none; border-radius: 7px; padding: 2px 9px; font-size: 12px; cursor: pointer; color: var(--ink-2); }
 
@@ -283,7 +307,7 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .rank li button { width: 100%; display: grid; grid-template-columns: 44px 1fr auto; gap: 6px; align-items: baseline;
   border: 0; background: none; padding: 4px 4px; border-radius: 6px; cursor: pointer; color: var(--ink); font: inherit; text-align: left; }
 .rank li button:hover, .rank li button:focus-visible { background: var(--hair); }
-.rank .rz { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; }
+.rank .rz { font-weight: 700; font-variant-numeric: tabular-nums; }
 .rank .rn { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank .rd { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rank .rd small { display: block; color: var(--muted); font-size: 11px; }
@@ -294,3 +318,8 @@ h1 { margin: 0; font-size: 26px; line-height: 1.1; color: var(--title); letter-s
 .viewbtns button { border: 0; background: none; padding: 5px 11px; border-radius: 7px; cursor: pointer; color: var(--ink-2); font: inherit; font-size: 13px; }
 .viewbtns button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
 .netnote { font-size: 12px; color: var(--ink-2); margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; background: var(--hair); }
+
+/* Links back to the maps hub and ridgelinemaps.com */
+.rm-links { margin: 6px 0 0; font-size: 12.5px; opacity: .8; }
+.rm-links a { color: inherit; }
+.rm-links a:hover, .rm-links a:focus-visible { opacity: 1; text-decoration: underline; }
