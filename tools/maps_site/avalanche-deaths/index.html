@@ -13,60 +13,57 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=IM+Fell+English:ital@0;1&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: a field report. Title and live tallies, one filter row, the winter timeline as the
-   date control, the big map, then who / when / where bars and the full accident log.
-   Light = snow and glacier blue. Dark = the same ramps stepped for a night sky.
-   Type follows the hockey maps: IM Fell English headings, Source Sans 3 text and labels,
-   Barlow Condensed for every figure, and IM Fell English italic for terrain names. */
+/* Ridgeline Maps house style, as on the East Troublesome map: warm paper and ink, a coral accent,
+   Libre Baskerville for headlines and story text, Libre Franklin for everything else.
+   Layout: title and live tallies, one filter row, the map as the hero figure, then the winter
+   timeline (also the date control), who / when / where bars and the full accident log.
+   Data colors: a glacier-blue ramp for deaths by state and coral dots for each avalanche,
+   validated on both papers (dataviz skill: even lightness steps, every class clear of the
+   no-death land, dots clear of every class for colorblind readers). Dark mode has its own steps. */
 :root {
-  --surface: #ffffff;
-  --sea: #eef3f6;
-  --land: #dce4ea;
-  --ink: #0f1d28;
-  --ink-2: #4a5a68;
-  --muted: #6b7a86;
-  --rule: #dfe5ea;
-  --axis: #c3cdd5;
-  --data: #2a78d6;
-  --data-dim: #c9d3dc;
-  --dot: #e8590c;
-  --seq-1: #b7d3f6; --seq-2: #86b6ef; --seq-3: #5598e7; --seq-4: #2a78d6; --seq-5: #184f95;
-  --band: #0f1d28;
-  --band-ink: #e9eff4;
-  --shadow: rgba(15, 29, 40, .16);
-  --f-display: "IM Fell English", Georgia, serif;
-  --f-ui: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-data: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
-  --f-label: "IM Fell English", Georgia, serif;
+  --paper: #f6f3ed; --surface: #ffffff; --ink: #2b2724; --ink-2: #5b5348; --faint: #857a6c;
+  --rule: #ddd6c9; --axis: #c9bfae; --chip: #efe9dd;
+  --accent: #c2531f; --accent-ink: #ffffff;
+  --sea: #ebe7df; --land: #f5f3ef; --border: #d2c9bb; --halo: rgba(250, 248, 244, .92);
+  --data: #2f6f9b; --data-dim: #d8d0c3; --dot: #c2531f;
+  --seq-1: #a3c8e4; --seq-2: #7cabcf; --seq-3: #548db7; --seq-4: #2f6f9b; --seq-5: #175076;
+  --band: #2b2724; --band-ink: #f6f3ed; --shadow: rgba(43, 39, 36, .2);
+  --serif: "Libre Baskerville", Georgia, serif;
+  --sans: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --surface: #141c23; --sea: #0f161c; --land: #22303a;
-    --ink: #e6edf2; --ink-2: #a8b6c2; --muted: #8796a2; --rule: #24313b; --axis: #34434f;
-    --data: #3987e5; --data-dim: #2d3a45; --dot: #e2622a;
-    --seq-1: #184f95; --seq-2: #256abf; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #9ec5f4;
-    --band: #0a0f13; --band-ink: #e6edf2; --shadow: rgba(0, 0, 0, .5);
+    --paper: #16130f; --surface: #201c17; --ink: #f1ece4; --ink-2: #b7ad9f; --faint: #908676;
+    --rule: #3a332b; --axis: #4d443a; --chip: #2a241d;
+    --accent: #f08a4b; --accent-ink: #1a120b;
+    --sea: #120f0c; --land: #24201a; --border: #3f372d; --halo: rgba(22, 19, 15, .9);
+    --data: #79a7cb; --data-dim: #3a332b; --dot: #f08a4b;
+    --seq-1: #224d6c; --seq-2: #356a90; --seq-3: #5188b0; --seq-4: #79a7cb; --seq-5: #a8c9e2;
+    --band: #0d0b09; --band-ink: #f1ece4; --shadow: rgba(0, 0, 0, .55);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --surface: #141c23; --sea: #0f161c; --land: #22303a;
-  --ink: #e6edf2; --ink-2: #a8b6c2; --muted: #8796a2; --rule: #24313b; --axis: #34434f;
-  --data: #3987e5; --data-dim: #2d3a45; --dot: #e2622a;
-  --seq-1: #184f95; --seq-2: #256abf; --seq-3: #3987e5; --seq-4: #6da7ec; --seq-5: #9ec5f4;
-  --band: #0a0f13; --band-ink: #e6edf2; --shadow: rgba(0, 0, 0, .5);
+  --paper: #16130f; --surface: #201c17; --ink: #f1ece4; --ink-2: #b7ad9f; --faint: #908676;
+  --rule: #3a332b; --axis: #4d443a; --chip: #2a241d;
+  --accent: #f08a4b; --accent-ink: #1a120b;
+  --sea: #120f0c; --land: #24201a; --border: #3f372d; --halo: rgba(22, 19, 15, .9);
+  --data: #79a7cb; --data-dim: #3a332b; --dot: #f08a4b;
+  --seq-1: #224d6c; --seq-2: #356a90; --seq-3: #5188b0; --seq-4: #79a7cb; --seq-5: #a8c9e2;
+  --band: #0d0b09; --band-ink: #f1ece4; --shadow: rgba(0, 0, 0, .55);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--surface); color: var(--ink); font: 16px/1.55 var(--f-ui); }
-a { color: var(--data); }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); }
+a { color: var(--accent); }
 p { margin: 0; }
 button { font: inherit; color: inherit; }
-button:focus-visible, a:focus-visible { outline: 2px solid var(--dot); outline-offset: 2px; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.num, .tab { font-variant-numeric: tabular-nums; }
 
 /* Site bar, shared with the other maps */
 .rm-bar {
@@ -79,179 +76,189 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--dot); outline-o
 .rm-bar nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 
 .wrap {
-  max-width: 1200px; margin: 0 auto;
+  max-width: 1280px; margin: 0 auto;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
-main.wrap { padding-block: 28px 56px; display: grid; gap: 36px; }
+main.wrap { padding-block: 28px 48px; display: grid; gap: 36px; }
 main.wrap > * { min-width: 0; }
 
 /* Header */
 .top { display: grid; gap: 24px 48px; align-items: end; }
-@media (min-width: 960px) { .top { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); } }
+@media (min-width: 960px) { .top { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); } }
 .top > * { min-width: 0; }
-.eyebrow { font: 700 12.5px/1.4 var(--f-data); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
-h1 { font: 400 clamp(34px, 5.4vw, 50px)/1.04 var(--f-display); letter-spacing: 0; margin: 8px 0 16px; text-wrap: balance; }
-h1 span { color: var(--data); }
-.lede { max-width: 62ch; color: var(--ink); font-size: 17px; }
+.kicker { font: 700 12px/1.3 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 8px; }
+.kicker span { white-space: nowrap; }
+h1 { font: 700 clamp(32px, 5vw, 56px)/1.05 var(--serif); margin: 0 0 14px; letter-spacing: -.01em; text-wrap: balance; }
+.dek { font: italic 18px/1.5 var(--serif); margin: 0 0 10px; max-width: 58ch; text-wrap: pretty; }
+.story { font: 15px/1.6 var(--serif); margin: 0 0 12px; max-width: 62ch; text-wrap: pretty; }
+.byline { font: 600 12px/1.3 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
 .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; margin: 0; }
 .stat { border-top: 2px solid var(--ink); padding-top: 8px; min-width: 0; }
-.stat dt { font: 600 11px/1.2 var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
-.stat dd { margin: 6px 0 0; font: 600 40px/1 var(--f-data); letter-spacing: .01em; }
-.stat dd small { display: block; margin-top: 5px; font: 400 13.5px/1.35 var(--f-ui); letter-spacing: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+.stat dt { font: 700 11px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.stat dd { margin: 6px 0 0; font: 600 clamp(26px, 3.4vw, 38px)/1.05 var(--sans); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.stat dd small { display: block; margin-top: 6px; font: 400 13px/1.4 var(--sans); letter-spacing: 0; color: var(--ink-2); overflow-wrap: anywhere; }
 
 /* Filter row */
 .filters {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
-  padding-block: 12px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); background: var(--surface);
+  padding-block: 12px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); background: var(--paper);
 }
 @media (min-width: 760px) and (min-height: 640px) {
   .filters { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 6; }
-  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--paper); }
 }
-.flabel { font: 600 11px/1 var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
-.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--axis); border-radius: 6px; padding: 2px; gap: 2px; }
+.flabel { font: 700 11px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .seg button {
-  border: 0; background: transparent; border-radius: 4px; padding: 6px 10px; cursor: pointer;
-  font: 700 13px/1.1 var(--f-data); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2);
+  border: 1px solid var(--rule); background: var(--chip); border-radius: 4px; padding: 7px 11px; cursor: pointer;
+  font: 600 13px/1.1 var(--sans); color: var(--ink);
 }
-.seg button:hover { color: var(--ink); background: var(--sea); }
-.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.seg button:hover { border-color: var(--ink-2); }
+.seg button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-  border: 1px solid var(--data); background: var(--sea); border-radius: 999px; padding: 5px 8px 5px 12px;
-  font: 500 14px/1.1 var(--f-ui); color: var(--ink);
+  border: 1px solid var(--accent); background: var(--surface); border-radius: 999px; padding: 5px 8px 5px 12px;
+  font: 500 13.5px/1.1 var(--sans); color: var(--ink);
 }
-.chip b { font-weight: 600; }
+.chip b { font-weight: 700; }
 .chip .x { font-size: 16px; line-height: 1; color: var(--ink-2); }
-.chip:hover .x { color: var(--ink); }
-.clear { border: 0; background: none; cursor: pointer; color: var(--data); font: 700 13px var(--f-data); letter-spacing: .05em; text-transform: uppercase; padding: 6px 2px; text-decoration: underline; text-underline-offset: 2px; }
+.chip:hover .x { color: var(--accent); }
+.clear { border: 0; background: none; cursor: pointer; color: var(--accent); font: 600 13px var(--sans); padding: 6px 2px; text-decoration: underline; text-underline-offset: 2px; }
 
 /* Sections */
 .sec { display: grid; gap: 12px; min-width: 0; align-content: start; }
-.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
-h2 { font: 400 27px/1.1 var(--f-display); margin: 0; letter-spacing: 0; text-wrap: balance; }
-.sec-head p, .note { color: var(--ink-2); font-size: 14.5px; max-width: 70ch; }
-.key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; color: var(--ink-2); align-items: center; }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; }
+h2 { font: 700 22px/1.2 var(--serif); margin: 0; letter-spacing: 0; text-wrap: balance; }
+.sec-head p, .note { color: var(--ink-2); font-size: 14px; max-width: 70ch; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); align-items: center; }
 .key span { display: inline-flex; align-items: center; gap: 6px; }
 .key i { display: inline-block; }
 .key .k-bar { width: 10px; height: 12px; border-radius: 2px 2px 0 0; background: var(--data); }
 .key .k-line { width: 18px; height: 2px; background: var(--ink); border-radius: 1px; }
+.key .k-last { width: 10px; height: 12px; border-radius: 2px 2px 0 0; background: var(--accent); }
 
 .chart { position: relative; min-width: 0; }
 .chart svg { display: block; max-width: 100%; overflow: visible; }
-.chart text { fill: var(--ink); font-family: var(--f-ui); font-size: 13px; }
-.chart .tick text, .chart .axis-lbl { fill: var(--muted); font: 500 12px var(--f-data); font-variant-numeric: tabular-nums; }
+.chart text { fill: var(--ink); font-family: var(--sans); font-size: 13px; }
+.chart .tick text, .chart .axis-lbl { fill: var(--faint); font: 500 11px var(--sans); font-variant-numeric: tabular-nums; }
 .chart .grid line { stroke: var(--rule); stroke-width: 1; shape-rendering: crispEdges; }
 .chart .base { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
 .chart .col, .chart .bar { fill: var(--data); transition: fill .15s; }
+.chart .latest .col { fill: var(--accent); }
 .chart .out .col, .chart .dim .bar, .chart .dim .col { fill: var(--data-dim); }
 .chart .avg { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
-.chart .peak { font: 600 13.5px var(--f-data); letter-spacing: .02em; pointer-events: none; }
-.chart .val { fill: var(--ink-2); font: 500 13.5px var(--f-data); font-variant-numeric: tabular-nums; }
-.chart .on .lbl { font-weight: 600; }
+.chart .peak { font: 700 12.5px var(--sans); pointer-events: none; font-variant-numeric: tabular-nums; }
+.chart .val { fill: var(--ink-2); font: 500 12.5px var(--sans); font-variant-numeric: tabular-nums; }
+.chart .on .lbl { font-weight: 700; }
 .chart .row, .chart .mcol { cursor: pointer; outline: none; }
 .chart .hit { fill: transparent; }
-.chart .row:hover .hit, .chart .mcol:hover .hit { fill: var(--sea); }
-.chart .row:focus-visible .hit, .chart .mcol:focus-visible .hit { stroke: var(--dot); stroke-width: 2; }
-.chart .brush .selection { fill: var(--data); fill-opacity: .08; stroke: var(--data); stroke-width: 1; }
-.chart .brush .handle { fill: var(--data); }
+.chart .row:hover .hit, .chart .mcol:hover .hit { fill: var(--chip); }
+.chart .row:focus-visible .hit, .chart .mcol:focus-visible .hit { stroke: var(--accent); stroke-width: 2; }
+.chart .brush .selection { fill: var(--accent); fill-opacity: .08; stroke: var(--accent); stroke-width: 1; }
+.chart .brush .handle { fill: var(--accent); }
 .chart .hover-band { fill: var(--ink); opacity: .06; pointer-events: none; }
 
 /* Tooltip */
 .tip {
   position: absolute; z-index: 4; pointer-events: none; width: max-content; max-width: min(280px, calc(100% - 8px));
-  background: var(--surface); color: var(--ink); border: 1px solid var(--axis); border-radius: 8px;
-  padding: 8px 11px 9px; font-size: 13.5px; line-height: 1.4; box-shadow: 0 6px 20px -6px var(--shadow);
+  background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 9px 12px 10px; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 20px -6px var(--shadow);
 }
-.tip .t-kick { font: 600 11px/1.4 var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
-.tip .t-val { font: 700 17px/1.25 var(--f-data); letter-spacing: .02em; }
-.tip .t-title { font: 400 19px/1.15 var(--f-display); }
+.tip .t-kick { font: 700 10.5px/1.4 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.tip .t-val { font: 700 16px/1.3 var(--sans); font-variant-numeric: tabular-nums; }
+.tip .t-title { font: 700 16px/1.25 var(--serif); margin-top: 1px; }
 .tip .t-meta { color: var(--ink-2); }
 .tip .t-desc { margin-top: 4px; }
-.tip .t-coord { margin-top: 4px; font: 500 13px var(--f-data); letter-spacing: .02em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.tip .t-hint { margin-top: 4px; font-size: 12.5px; color: var(--ink-2); font-style: italic; }
+.tip .t-coord { margin-top: 4px; font: 500 12px var(--sans); color: var(--faint); font-variant-numeric: tabular-nums; }
+.tip .t-hint { margin-top: 5px; font: italic 12.5px var(--serif); color: var(--ink-2); }
 .tip.pinned { pointer-events: auto; }
 .tip .t-links { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
 /* Accident report links, in the pinned tooltip and the accident log */
 .rep {
-  display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--data); border-radius: 6px; padding: 4px 8px 3px;
-  font: 700 12.5px/1 var(--f-data); letter-spacing: .05em; text-transform: uppercase; color: var(--data); text-decoration: none; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--accent); border-radius: 4px; padding: 5px 8px;
+  font: 600 12.5px/1 var(--sans); color: var(--accent); text-decoration: none; white-space: nowrap; background: var(--surface);
 }
-.rep:hover, .rep:focus-visible { background: var(--sea); }
+.rep:hover, .rep:focus-visible { background: var(--accent); color: var(--accent-ink); }
 
-/* Map */
-.map-frame { position: relative; background: var(--sea); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+/* Map: the hero figure, as on the East Troublesome map */
+.figure { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.map-frame { position: relative; background: var(--sea); overflow: hidden; }
 .map-frame svg { display: block; width: 100%; height: auto; touch-action: pan-x pan-y; cursor: default; isolation: isolate; }
 .map-frame svg.grab { cursor: grab; }
 .sea { fill: var(--sea); }
+.land { fill: var(--land); pointer-events: none; }
 .st { fill: var(--land); transition: fill .2s; }
 /* Relief tiles are gray with 128 = flat: hard-light darkens shadows and lightens sunlit slopes. */
 .relief { mix-blend-mode: hard-light; pointer-events: none; }
 .terrain { pointer-events: none; }
-.terrain text { font-family: var(--f-label); font-style: italic; fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
-.terrain .range text { font-size: 14px; letter-spacing: .14em; }
-.terrain .peak text { font-size: 13px; letter-spacing: .02em; }
-.terrain .peak path { fill: var(--ink-2); stroke: var(--surface); stroke-width: 1.5px; paint-order: stroke; }
+.terrain text { font-family: var(--sans); fill: var(--ink-2); paint-order: stroke; stroke: var(--halo); stroke-width: 3px; stroke-linejoin: round; }
+/* Range names in widely spaced capitals, peaks in small regular type, as on the print maps. */
+.terrain .range text { font-size: 10.5px; font-weight: 600; letter-spacing: .24em; text-transform: uppercase; }
+.terrain .peak text { font-size: 11.5px; font-weight: 500; }
+.terrain .peak path { fill: var(--ink-2); stroke: var(--halo); stroke-width: 1.5px; paint-order: stroke; }
 .st.q1 { fill: var(--seq-1); } .st.q2 { fill: var(--seq-2); } .st.q3 { fill: var(--seq-3); }
 .st.q4 { fill: var(--seq-4); } .st.q5 { fill: var(--seq-5); }
 .st.has { cursor: pointer; }
-.borders { fill: none; stroke: var(--surface); stroke-width: 1.25; vector-effect: non-scaling-stroke; stroke-linejoin: round; pointer-events: none; }
+.borders { fill: none; stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; pointer-events: none; }
 .nation { fill: none; stroke: var(--axis); stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
 .hl { fill: none; stroke: var(--ink); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
 .hl.hover { stroke-width: 1.25; }
-.dot { fill: var(--dot); stroke: var(--surface); transition: opacity .2s; }
+.dot { fill: var(--dot); fill-opacity: .92; stroke: var(--surface); transition: opacity .2s; }
 .dot.dim { opacity: .22; }
 .ring { fill: none; stroke: var(--ink); pointer-events: none; }
-.slabel { pointer-events: none; fill: var(--ink); paint-order: stroke; stroke: var(--surface); stroke-linejoin: round; font-family: var(--f-data); }
-.slabel .code { font-weight: 600; letter-spacing: .06em; }
+.slabel { pointer-events: none; fill: var(--ink); paint-order: stroke; stroke: var(--halo); stroke-linejoin: round; font-family: var(--sans); }
+.slabel .code { font-weight: 700; letter-spacing: .08em; }
+.slabel .n { font-weight: 500; font-variant-numeric: tabular-nums; }
 .zoom { position: absolute; top: 10px; right: 10px; display: grid; gap: 4px; z-index: 3; }
 .zoom button {
-  width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--axis); background: var(--surface); color: var(--ink);
-  font: 600 18px/1 var(--f-ui); cursor: pointer; display: grid; place-items: center; padding: 0;
+  width: 34px; height: 34px; border-radius: 4px; border: 1px solid rgba(43, 39, 36, .18); background: rgba(246, 243, 237, .94); color: #2b2724;
+  font: 600 18px/1 var(--sans); cursor: pointer; display: grid; place-items: center; padding: 0;
 }
-.zoom button:hover { border-color: var(--ink); }
+.zoom button:hover { border-color: #2b2724; }
 .zoom svg { width: 16px; height: 16px; }
 .hint {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3; pointer-events: none;
-  background: var(--band); color: var(--band-ink); padding: 8px 14px; border-radius: 8px; font-size: 14px; text-align: center;
+  background: var(--band); color: var(--band-ink); padding: 8px 14px; border-radius: 6px; font-size: 13.5px; text-align: center;
   max-width: calc(100% - 32px); opacity: 0; transition: opacity .2s;
 }
-.hint.show { opacity: .92; }
-.legend { display: flex; flex-wrap: wrap; gap: 14px 36px; align-items: flex-start; font-size: 13.5px; color: var(--ink-2); }
+.hint.show { opacity: .94; }
+.below { display: grid; gap: 12px; padding: 14px 16px 16px; border-top: 1px solid var(--rule); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px 40px; align-items: flex-start; font-size: 13px; color: var(--ink-2); }
 .lg { display: grid; gap: 6px; }
-.lg-title { font: 600 11px/1.2 var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.lg-title { font: 700 11px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
 .lg-scale { display: flex; flex-wrap: wrap; gap: 2px; }
-.lg-scale span { display: grid; gap: 3px; min-width: 50px; font: 500 12.5px var(--f-data); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.lg-scale span { display: grid; gap: 4px; min-width: 52px; font: 500 12px var(--sans); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .lg-scale i { display: block; height: 12px; }
-.lg-scale span:first-child i { border-radius: 3px 0 0 3px; }
-.lg-scale span:last-child i { border-radius: 0 3px 3px 0; }
-.lg-dots { display: flex; align-items: center; gap: 14px; font: 500 13px var(--f-data); }
+.lg-scale span:first-child i { border-radius: 2px 0 0 2px; box-shadow: inset 0 0 0 1px var(--border); }
+.lg-scale span:last-child i { border-radius: 0 2px 2px 0; }
+.lg-dots { display: flex; align-items: center; gap: 14px; font: 500 12.5px var(--sans); }
 .lg-dots span { display: inline-flex; align-items: center; gap: 6px; }
 .lg-dots svg { overflow: visible; }
+.lg-dots .dot { fill-opacity: .92; }
 
 /* Who / when / where */
 .trio { display: grid; gap: 36px 40px; }
 @media (min-width: 720px) { .trio { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1080px) { .trio { grid-template-columns: 1.1fr 1fr 0.9fr; } }
 .trio > * { min-width: 0; }
-.trio h2 { font-size: 24px; }
+.trio h2 { font-size: 20px; }
 
 /* Accident log */
 .table-wrap { position: relative; overflow-x: auto; border-top: 2px solid var(--ink); }
-table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size: 14.5px; }
-.log th { text-align: left; font: 600 11px/1.2 var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); padding: 10px 10px 8px 0; border-bottom: 1px solid var(--rule); }
-.log td { padding: 10px 10px 10px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
-.log td.date { font: 500 14px/1.45 var(--f-data); letter-spacing: .02em; white-space: nowrap; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.log .place { font-weight: 600; }
-.log .desc { color: var(--ink-2); font-size: 13.5px; }
+table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size: 14px; }
+.log th { text-align: left; font: 700 11px/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); padding: 10px 10px 8px 0; border-bottom: 1px solid var(--rule); }
+.log td { padding: 11px 10px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.log td.date { font: 500 13px/1.5 var(--sans); white-space: nowrap; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.log .place { font: 700 15px/1.35 var(--serif); }
+.log .desc { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
 .log .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.log td.num { font: 600 16px/1.35 var(--f-data); }
+.log td.num { font: 700 15px/1.35 var(--sans); }
 .log .pin {
-  display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--axis); background: var(--surface); border-radius: 6px;
-  padding: 4px 8px 3px; cursor: pointer; font: 700 12.5px/1 var(--f-data); letter-spacing: .05em; text-transform: uppercase; color: var(--ink); white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--rule); background: var(--chip); border-radius: 4px;
+  padding: 5px 8px; cursor: pointer; font: 600 12.5px/1 var(--sans); color: var(--ink); white-space: nowrap;
 }
-.log .pin:hover { border-color: var(--ink); }
+.log .pin:hover { border-color: var(--ink-2); }
 .log .pin i { width: 8px; height: 8px; border-radius: 50%; background: var(--dot); display: inline-block; }
 .log .links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .log tr.empty td { color: var(--ink-2); padding: 20px 0; }
@@ -264,23 +271,31 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
   .log td { padding: 0; border: 0; }
   .log td.date { grid-row: 1; grid-column: 1; }
   .log td.num { grid-row: 1; grid-column: 2; }
-  .log td.num::after { content: " killed"; font: 500 14px var(--f-data); color: var(--ink-2); }
+  .log td.num::after { content: " killed"; font: 500 13px var(--sans); color: var(--ink-2); }
   .log td.where { grid-column: 1 / -1; }
-  .log td.act { grid-column: 1; color: var(--ink-2); font-size: 13.5px; align-self: center; }
+  .log td.act { grid-column: 1; color: var(--ink-2); font-size: 13px; align-self: center; }
   .log td.mapc { grid-column: 2; align-self: center; }
   .log tr.empty { display: block; }
 }
-.more { justify-self: start; border: 1px solid var(--ink); background: var(--surface); border-radius: 6px; padding: 9px 14px 8px; cursor: pointer; font: 700 13px/1 var(--f-data); letter-spacing: .05em; text-transform: uppercase; }
-.more:hover { background: var(--sea); }
+.more { justify-self: start; border: 1px solid var(--rule); background: var(--chip); border-radius: 4px; padding: 9px 14px; cursor: pointer; font: 600 14px/1 var(--sans); color: var(--ink); }
+.more:hover { border-color: var(--ink-2); }
 
-/* Notes */
-.notes { display: grid; gap: 24px 48px; border-top: 2px solid var(--ink); padding-top: 18px; font-size: 14.5px; color: var(--ink-2); }
-@media (min-width: 860px) { .notes { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); } }
+/* About the data, the safety note and the studio box, as on the other story maps */
+.notes { display: grid; gap: 24px 48px; border-top: 1px solid var(--rule); padding-top: 16px; font-size: 13px; color: var(--ink-2); }
+@media (min-width: 860px) { .notes { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); } }
 .notes > * { min-width: 0; }
-.notes h2 { font-size: 22px; color: var(--ink); margin-bottom: 8px; }
-.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
-.safety { background: var(--sea); border-radius: 10px; padding: 16px 18px; color: var(--ink); align-self: start; }
+.notes h2 { font: 700 12px/1.3 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--ink); margin-bottom: 8px; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 110ch; }
+.safety { background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--accent); border-radius: 6px; padding: 14px 16px; color: var(--ink); align-self: start; font-size: 14px; }
+.safety b { font-family: var(--serif); }
 .safety p + p { margin-top: 8px; }
+.promo { padding: 20px 22px; border-radius: 6px; background: var(--surface); border: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
+.promo h2 { font: 700 18px/1.25 var(--serif); margin: 0 0 4px; }
+.promo p { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 60ch; }
+.promo .links { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; font-size: 14px; }
+.buy { background: #F0C030; color: #1a1a1a; font-weight: 600; text-decoration: none; padding: 9px 16px; border-radius: 6px; }
+.buy:hover, .buy:focus-visible { filter: brightness(.95); text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -290,13 +305,15 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
 <main class="wrap">
   <header class="top">
     <div>
-      <p class="eyebrow">Colorado Avalanche Information Center records · winters <span data-k="first">1950–51</span> to <span data-k="last">2025–26</span></p>
-      <h1>Avalanche deaths in the <span>United States</span></h1>
-      <p class="lede">Since the winter of <span data-k="first">1950–51</span>, avalanches have killed
+      <p class="kicker">Avalanches &middot; United States &middot; Winters <span data-k="first">1950–51</span> to <span data-k="last">2025–26</span></p>
+      <h1>Avalanche deaths in the United States</h1>
+      <p class="dek">Since the winter of <span data-k="first">1950–51</span>, avalanches have killed
         <span data-k="total">1,278</span> people in the United States. Deaths rose from about <span data-k="early">4</span> a winter
         in the 1950s to <span data-k="peakdec">29</span> a winter in the 2000s as more people skied, climbed and rode
-        snowmobiles into the backcountry. The last ten winters averaged <span data-k="last10">23</span>.
+        snowmobiles into the backcountry.</p>
+      <p class="story">The last ten winters averaged <span data-k="last10">23</span>.
         <span data-k="topname">Colorado</span> has lost <span data-k="topn">329</span>, more than any other state.</p>
+      <p class="byline">Map and graphics by Mike Floyd, Ridgeline Maps &middot; Records from the Colorado Avalanche Information Center</p>
     </div>
     <dl class="stats" aria-live="polite">
       <div class="stat"><dt>People killed</dt><dd><span id="st-killed">1,278</span><small id="st-killed-sub">in 76 winters</small></dd></div>
@@ -318,20 +335,12 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
     <button type="button" class="clear" id="clear" hidden>Clear all filters</button>
   </div>
 
-  <section class="sec" aria-labelledby="h-tl">
-    <div class="sec-head">
-      <h2 id="h-tl">Deaths each winter</h2>
-      <p>Drag across the bars to pick a run of winters, or tap one winter. Bars sit at the year a winter ends.</p>
-    </div>
-    <div class="key" aria-hidden="true"><span><i class="k-bar"></i>People killed that winter</span><span><i class="k-line"></i>5-winter average</span></div>
-    <div class="chart" id="timeline"></div>
-  </section>
-
   <section class="sec" aria-labelledby="h-map">
     <div class="sec-head">
       <h2 id="h-map">Where they died</h2>
       <p>Click a state to zoom in and filter. Hover or tap a dot for the details of that avalanche.</p>
     </div>
+    <div class="figure">
     <div class="map-frame" id="map-frame">
       <svg id="map" viewBox="0 0 975 610" role="img" aria-label="Map of the United States with states shaded by avalanche deaths and a dot for each fatal avalanche with a recorded location. The same records are listed in the table below the map."></svg>
       <div class="zoom">
@@ -341,12 +350,25 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
       </div>
       <div class="hint" id="hint" aria-hidden="true">Hold Ctrl or &#8984; and scroll to zoom</div>
     </div>
+    <div class="below">
     <div class="legend">
       <div class="lg"><span class="lg-title">People killed in each state</span><div class="lg-scale" id="lg-scale"></div></div>
       <div class="lg"><span class="lg-title">Fatal avalanche with a known location</span><div class="lg-dots" id="lg-dots"></div></div>
     </div>
     <p class="note" id="map-note"></p>
+    </div>
+    </div>
   </section>
+
+  <section class="sec" aria-labelledby="h-tl">
+    <div class="sec-head">
+      <h2 id="h-tl">Deaths each winter</h2>
+      <p>Drag across the bars to pick a run of winters, or tap one winter. Bars sit at the year a winter ends.</p>
+    </div>
+    <div class="key" aria-hidden="true"><span><i class="k-bar"></i>People killed that winter</span><span><i class="k-line"></i>5-winter average</span><span><i class="k-last"></i>Latest winter</span></div>
+    <div class="chart" id="timeline"></div>
+  </section>
+
 
   <div class="trio">
     <section class="sec" aria-labelledby="h-grp">
@@ -407,6 +429,17 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
       <p>Carry a beacon, shovel and probe, and know how to use them.</p>
     </div>
   </footer>
+
+  <section class="promo" aria-label="Prints and custom maps">
+    <div>
+      <h2>Need a map like this?</h2>
+      <p>Ridgeline Maps makes custom maps of fires, avalanches, trails and the places you care about, for print, web and video.</p>
+    </div>
+    <div class="links">
+      <a class="buy" href="https://ridgelinemaps.com/custom-maps">Commission a custom map</a>
+      <a href="https://ridgelinemaps.com/store">Shop map prints</a>
+    </div>
+  </section>
 </main>
 
 <!-- US states, 50 + DC, from us-atlas 3.0.1 (Census cartographic boundaries, 1:10m), lightly simplified. -->
@@ -694,6 +727,7 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
     const inRange = s => s >= filt.range[0] && s <= filt.range[1];
     TL.bars.selectAll("g").data(vals, d => d.s).join(enter => { const g = enter.append("g"); g.append("path").attr("class", "col"); return g; })
       .classed("out", d => !fullRange() && !inRange(d.s))
+      .classed("latest", d => d.s === S1)
       .select("path").attr("d", d => colPath(x(d.s), y(d.k), x.bandwidth(), y(0) - y(d.k)));
     TL.avg.attr("d", d3.line().defined(d => d.avg !== null).x(d => x(d.s) + x.bandwidth() / 2).y(d => y(d.avg)).curve(d3.curveMonotoneX)(vals));
     // Label the deadliest winter only (the latest one if tied).
@@ -743,7 +777,10 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
   MAP.svg = d3.select("#map");
   MAP.g = MAP.svg.append("g");
   MAP.g.append("rect").attr("class", "sea").attr("width", W).attr("height", H);
-  MAP.states = MAP.g.append("g").selectAll("path").data(STATES).join("path").attr("d", geoPath);
+  // Plain land under the state colors, which fade toward it as you zoom in (see updateRelief).
+  MAP.g.append("path").attr("class", "land").attr("d", geoPath(topojson.merge(TOPO, TOPO.objects.states.geometries)));
+  MAP.statesG = MAP.g.append("g");
+  MAP.states = MAP.statesG.selectAll("path").data(STATES).join("path").attr("d", geoPath);
   MAP.relief = MAP.g.append("g").attr("class", "relief");
   MAP.reliefBase = MAP.relief.append("g");
   MAP.reliefTop = MAP.relief.append("g");
@@ -776,8 +813,10 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
     const L = Math.max(1, Math.min(RELIEF.levels.length - 1, Math.ceil(Math.log2(need) - 0.3)));
     const [x0, y0] = MAP.t.invert([0, 0]), [x1, y1] = MAP.t.invert([W, H]);
     drawRelief(MAP.reliefTop, L > 1 ? reliefTiles(L, (x, y, s) => x < x1 && x + s > x0 && y < y1 && y + s > y0) : []);
-    // Quiet at the national view, where the state colors carry the story; stronger as you zoom in.
+    // Quiet at the national view, where the state colors carry the story; stronger as you zoom in,
+    // while the state colors fade so the terrain and the dots take over.
     MAP.relief.attr("opacity", Math.min(0.85, 0.5 + 0.18 * (MAP.k - 1)));
+    MAP.statesG.attr("fill-opacity", Math.max(0.4, Math.min(1, 1 - 0.18 * (MAP.k - 1.5))));
   }
   if (RELIEF) drawRelief(MAP.reliefBase, reliefTiles(1));
 
@@ -804,8 +843,11 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
     const boxes = []; // on-screen boxes of the terrain labels in view, roughly sized from the name
     MAP.terrain.attr("display", d => {
       if (zoomed < d.minK) return "none";
-      const x = d.x * ks, y = d.y * ks, w = d.name.length * (d.kind === "peak" ? 6.2 : 8.6);
-      boxes.push(d.kind === "peak" ? [x - 5, y - 8, x + w + 12, y + 8] : [x - w / 2, y - 8, x + w / 2, y + 8]);
+      const x = d.x * ks, y = d.y * ks, w = d.name.length * (d.kind === "peak" ? 6.6 : 9.8); // spaced capitals for ranges
+      const b = d.kind === "peak" ? [x - 5, y - 8, x + w + 12, y + 8] : [x - w / 2, y - 8, x + w / 2, y + 8];
+      // Names come in order of importance, so one that would overprint a name already placed waits for more zoom.
+      if (boxes.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])) return "none";
+      boxes.push(b);
       return null;
     }).attr("transform", d => `translate(${d.x},${d.y}) scale(${1 / ks})`);
     // State labels need room on screen, and give way to a mountain or peak name once zoomed in.
@@ -1003,12 +1045,16 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
   }
 
   // ---- Horizontal bar list (activities, states)
+  // Width of a label in the chart font, so a list only stacks its labels when they don't fit beside the bars.
+  const textCtx = document.createElement("canvas").getContext("2d");
+  const labelWidth = t => { textCtx.font = '13px "Libre Franklin", "Helvetica Neue", Arial, sans-serif'; return textCtx.measureText(t).width; };
   function hbars(box, items, { active, onPick, tip, value }) {
     const w = Math.max(240, box.clientWidth);
-    const stacked = w < 400;
-    const rowH = stacked ? 44 : 30, barH = 14;
-    const labelW = stacked ? 0 : Math.min(170, Math.round(w * 0.42));
     const valueW = 72;
+    const need = Math.ceil(d3.max(items, d => labelWidth(d.label)) || 0) + 14;
+    const stacked = need > Math.min(180, w * 0.45) || w - need - valueW < 110;
+    const rowH = stacked ? 44 : 30, barH = 14;
+    const labelW = stacked ? 0 : need;
     const max = d3.max(items, d => d.value) || 1;
     const x = d3.scaleLinear([0, max], [0, Math.max(20, w - labelW - valueW)]);
     const h = items.length * rowH;
@@ -1164,6 +1210,7 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
   measure();
   layoutTimeline();
   update();
+  if (document.fonts) document.fonts.ready.then(() => update()); // labels are measured in the web font
   let resizeTimer, lastW = document.documentElement.clientWidth;
   new ResizeObserver(() => {
     clearTimeout(resizeTimer);
