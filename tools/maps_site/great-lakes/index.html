@@ -99,7 +99,7 @@ body.steady .blink { animation: none; }
 
 .key {
   left: calc(var(--gutter) + env(safe-area-inset-left, 0px)); bottom: calc(var(--gutter) + env(safe-area-inset-bottom, 0px));
-  width: min(340px, calc(100vw - 2 * var(--gutter))); max-height: calc(100% - 330px); overflow-y: auto; padding: 0;
+  width: min(340px, calc(100vw - 2 * var(--gutter))); max-height: calc(100% - 372px);  /* room for the brand card, incl. its links row */ overflow-y: auto; padding: 0;
 }
 .key > summary {
   list-style: none; cursor: pointer; padding: 12px 18px; font: 600 12px/1 var(--ui); letter-spacing: 0.16em;
@@ -219,6 +219,7 @@ body.steady .blink { animation: none; }
   .brand { width: calc(100vw - 2 * var(--gutter)); box-sizing: border-box; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+.rm-links { margin: 6px 0 0; font-size: 12.5px; opacity: .8; } .rm-links a { color: inherit; } .rm-links a:hover, .rm-links a:focus-visible { opacity: 1; text-decoration: underline; }
 </style>
 
 </head>
@@ -230,6 +231,7 @@ body.steady .blink { animation: none; }
   <p class="eyebrow">Ridgeline Maps · night chart</p>
   <h1>Lighthouses <span>&amp;</span> Shipwrecks</h1>
   <p class="sub">of the Great Lakes and the St. Lawrence River</p>
+  <p class="rm-links"><a href="../">&larr; All interactive maps</a><span aria-hidden="true"> · </span><a href="https://ridgelinemaps.com">ridgelinemaps.com</a></p>
   <p class="counts"><b>746</b> lighthouses · <b>632</b> lit · <b>920</b> wrecks · <b>512</b> named</p>
   <div class="acts">
     <button id="flashbtn" class="flashbtn" type="button" aria-pressed="false" hidden><i></i><span>Lights flashing</span></button>
