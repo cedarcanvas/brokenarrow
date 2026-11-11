@@ -1,0 +1,1184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); } body { margin: 0; } img { max-width: 100%; } [hidden] { display: none !important; }</style>
+</head>
+<body>
+<title>Ski Day Receipt Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Courier+Prime:wght@400;700&display=swap">
+<style>
+/* Layout: a two-pane workbench. Controls on the left, a thermal receipt pinned on the right like it just came out of the ticket-window printer. */
+:root {
+  --bg: #E4EBF1;
+  --panel: #F6F9FB;
+  --ink: #12203A;
+  --muted: #56667D;
+  --line: #C6D1DC;
+  --accent: #1D56B8;      /* blue-square blue */
+  --accent-ink: #FFFFFF;
+  --field: #FFFFFF;
+  --paper: #FBFAF5;
+  --paper-ink: #1E1C19;
+  --paper-faint: #77726A;
+  --shadow: rgba(18, 32, 58, .18);
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-ui: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-receipt: "Courier Prime", "Courier New", Courier, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D141F; --panel: #141E2C; --ink: #E1E8F0; --muted: #93A3B8; --line: #2A3850;
+    --accent: #6FA1F4; --accent-ink: #0D141F; --field: #0F1825;
+    --paper: #ECE9E0; --paper-ink: #1E1C19; --paper-faint: #6E695F; --shadow: rgba(0,0,0,.55);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D141F; --panel: #141E2C; --ink: #E1E8F0; --muted: #93A3B8; --line: #2A3850;
+  --accent: #6FA1F4; --accent-ink: #0D141F; --field: #0F1825;
+  --paper: #ECE9E0; --paper-ink: #1E1C19; --paper-faint: #6E695F; --shadow: rgba(0,0,0,.55);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; margin-bottom: 24px; }
+h1 { font-family: var(--font-display); font-stretch: 125%; font-weight: 800; text-transform: uppercase; letter-spacing: .01em;
+     font-size: clamp(1.7rem, 4.2vw, 2.6rem); line-height: 1; margin: 0; text-wrap: balance; }
+.lede { margin: 8px 0 0; color: var(--muted); max-width: 60ch; }
+.trail-key { display: flex; gap: 6px; align-items: center; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 32px; align-items: start; }
+.controls { display: grid; gap: 18px; min-width: 0; }
+.receipt-col { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); display: grid; gap: 14px; justify-items: center; }
+
+.example-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+  font-size: .9rem; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 10px 14px; }
+.example-note strong { color: var(--ink); }
+
+fieldset { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; margin: 0; padding: 16px 18px 18px; min-width: 0; }
+legend { font-family: var(--font-display); font-stretch: 115%; font-weight: 750; text-transform: uppercase; letter-spacing: .06em;
+  font-size: .82rem; padding: 0 6px; margin-left: -6px; }
+.hint { color: var(--muted); font-size: .85rem; margin: -2px 0 12px; max-width: 62ch; }
+
+.grid { display: grid; gap: 12px; align-items: end; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+label.f { display: grid; gap: 4px; font-size: .78rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); min-width: 0; }
+input, select { font: inherit; font-size: .95rem; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 6px;
+  padding: 7px 9px; width: 100%; min-width: 0; font-variant-numeric: tabular-nums; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+.seg label { cursor: pointer; }
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.seg span { display: block; padding: 7px 14px; font-weight: 600; font-size: .9rem; }
+.seg input:checked + span { background: var(--accent); color: var(--accent-ink); }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+.rows { display: grid; gap: 8px; }
+.row { display: grid; gap: 8px; align-items: center; }
+.row.gear { grid-template-columns: minmax(0, 1fr) 7rem 6rem 2.2rem; }
+.row.trav { grid-template-columns: minmax(0, 1fr) 7rem 9.5rem 2.2rem; }
+.row.swap { grid-template-columns: minmax(0, 1fr) 7rem 2.2rem; }
+.row-head { font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.x { border: 1px solid transparent; background: none; color: var(--muted); border-radius: 6px; height: 2.2rem; cursor: pointer; font-size: 1.1rem; }
+.x:hover { border-color: var(--line); color: var(--ink); }
+.add { margin-top: 10px; }
+button.btn { font: inherit; font-weight: 600; font-size: .88rem; border-radius: 7px; padding: 7px 13px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--field); color: var(--ink); }
+button.btn:hover { border-color: var(--accent); }
+button.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.basis { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 12px; font-size: .9rem; }
+.basis label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.basis input { width: auto; }
+
+/* Trail-map difficulty symbols */
+.sym { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; flex: none; }
+.sym.green { border-radius: 50%; background: #2E8B4A; }
+.sym.blue { background: #1D56B8; }
+.sym.black { background: #111; transform: rotate(45deg) scale(.86); }
+.sym.dbl { width: 22px; position: relative; }
+.sym.dbl::before, .sym.dbl::after { content: ""; position: absolute; top: 0; width: 12px; height: 12px; background: #111; transform: rotate(45deg) scale(.86); }
+.sym.dbl::before { left: 0; } .sym.dbl::after { left: 10px; }
+
+/* ---------- Receipt ---------- */
+.receipt-shell { width: 100%; max-width: 360px; filter: drop-shadow(0 10px 18px var(--shadow)); }
+.receipt { position: relative; background: var(--paper); color: var(--paper-ink); font-family: var(--font-receipt);
+  font-size: 13.5px; line-height: 1.35; padding: 26px 22px 22px; margin-block: 10px; font-variant-numeric: tabular-nums; }
+.receipt::before, .receipt::after { content: ""; position: absolute; left: 0; right: 0; height: 10px; background-size: 14px 10px; background-repeat: repeat-x; }
+.receipt::before { top: -10px; background-image: conic-gradient(from 135deg at 50% 0, var(--paper) 90deg, transparent 0); background-position: 0 100%; }
+.receipt::after { bottom: -10px; background-image: conic-gradient(from -45deg at 50% 100%, var(--paper) 90deg, transparent 0); background-position: 0 0; }
+.r-center { text-align: center; }
+.r-resort { font-weight: 700; font-size: 1.35rem; text-transform: uppercase; letter-spacing: .04em; line-height: 1.1; overflow-wrap: anywhere; }
+.r-sub { text-transform: uppercase; letter-spacing: .18em; font-size: .78rem; margin-top: 4px; }
+.r-meta { color: var(--paper-faint); font-size: .78rem; margin-top: 8px; text-transform: uppercase; }
+.r-rule { border: 0; border-top: 1.5px dashed var(--paper-ink); opacity: .55; margin: 12px 0; }
+.r-rule.double { border-top: 3px double var(--paper-ink); opacity: .8; }
+.r-h { font-weight: 700; text-transform: uppercase; letter-spacing: .12em; font-size: .78rem; margin: 10px 0 4px; }
+.r-line { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.r-line > span:first-child { min-width: 0; overflow-wrap: anywhere; text-transform: uppercase; }
+.r-line > span:last-child { white-space: nowrap; }
+.r-note { color: var(--paper-faint); font-size: .76rem; padding-left: 1.2em; margin-top: -1px; text-transform: uppercase; }
+.r-total { font-weight: 700; font-size: 1.25rem; }
+.r-big { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--paper-ink); border: 1.5px solid var(--paper-ink); margin: 8px 0 4px; }
+.r-big > div { background: var(--paper); padding: 8px 6px; text-align: center; }
+.r-big b { display: block; font-size: 1.15rem; }
+.r-big small { font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; }
+.r-rating { display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-top: 6px; }
+.receipt .sym.green, .receipt .sym.blue { background: var(--paper-ink); }
+.receipt .sym.black, .receipt .sym.dbl::before, .receipt .sym.dbl::after { background: var(--paper-ink); }
+.receipt .sym.blue { border-radius: 0; }
+.r-box { border: 2px solid var(--paper-ink); padding: 10px 12px; margin-top: 8px; }
+.r-box .r-h { margin-top: 0; text-align: center; }
+.r-barcode { display: block; width: 100%; height: 46px; margin: 14px 0 4px; color: var(--paper-ink); }
+.r-foot { text-align: center; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; }
+.wide { margin-bottom: 10px; }
+.f.full { grid-column: 1 / -1; }
+.resort-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+h3.sub { font-family: var(--font-display); font-stretch: 110%; font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 8px; }
+h3.sub span { font-family: var(--font-ui); font-stretch: 100%; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+.invest { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--field); }
+.tag { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); text-align: center; }
+.add-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.drop { display: grid; gap: 4px; border: 1.5px dashed var(--line); border-radius: 8px; padding: 14px 16px; cursor: pointer; margin-bottom: 12px; background: var(--field); }
+.drop:hover, .drop.over { border-color: var(--accent); }
+.drop:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.drop-title { font-weight: 700; color: var(--accent); }
+.drop-sub { font-size: .85rem; color: var(--muted); }
+.track-result { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; display: grid; gap: 10px; font-size: .92rem; }
+.track-result.err { border-color: #B3402F; }
+.track-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-variant-numeric: tabular-nums; }
+.track-stats b { font-size: 1.05rem; }
+.track-actions { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.track-actions label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.track-actions input { width: auto; }
+.receipt-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.copied { font-size: .85rem; color: var(--muted); min-height: 1.2em; text-align: center; }
+
+@media (max-width: 880px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .receipt-col { position: static; order: -1; }
+}
+@media (max-width: 520px) {
+  .wrap { padding-inline: 16px; }
+  .row.gear, .row.trav { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.2rem; }
+  .row.gear > :first-child, .row.trav > :first-child { grid-column: 1 / -1; }
+  .row-head.gear-h, .row-head.trav-h { display: none; }
+  .receipt { padding-inline: 16px; font-size: 12.5px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .receipt.printing { animation: print .5s steps(10, end); }
+  @keyframes print { from { clip-path: inset(0 0 85% 0); } to { clip-path: inset(0 0 0 0); } }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Ski Day Receipt</h1>
+      <p class="lede">Enter what your season costs. Get the itemized damage per day, per run, per lift ride and per vertical foot.</p>
+    </div>
+    <div class="trail-key" aria-label="Cost per day rating key" title="Cost-per-day rating: green under $60, blue under $120, black under $200, double black above">
+      <span class="sym green"></span><span class="sym blue"></span><span class="sym black"></span><span class="sym dbl"></span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <form class="controls" id="form" autocomplete="off">
+      <div class="example-note" id="exampleNote">
+        <span><strong>Example numbers loaded.</strong> Swap in your own; your entries stay in this browser.</span>
+        <button type="button" class="btn" id="resetBtn">Reset to example</button>
+      </div>
+
+      <fieldset>
+        <legend>The receipt</legend>
+        <div class="grid">
+          <label class="f full">Resort / mountain<span class="resort-pair"><select id="resortPick"></select>
+            <input id="resort" type="text" placeholder="Mountain name" aria-label="Mountain name" hidden></span></label>
+          <label class="f">Skier<input id="skier" type="text"></label>
+          <label class="f">Season<select id="season"></select></label>
+          <label class="f">Currency
+            <select id="currency">
+              <option value="USD">USD $</option><option value="CAD">CAD $</option><option value="EUR">EUR €</option>
+              <option value="GBP">GBP £</option><option value="CHF">CHF</option><option value="JPY">JPY ¥</option>
+              <option value="AUD">AUD $</option><option value="NZD">NZD $</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Your days on snow</legend>
+        <label class="drop" id="dropZone" for="trackFile">
+          <input id="trackFile" type="file" accept=".gpx,.tcx,.kml,application/gpx+xml" multiple>
+          <span class="drop-title">Load a GPS track</span>
+          <span class="drop-sub">Drop GPX, TCX or KML files here, or tap to choose. One file per ski day, or several days at once. Slopes, Ski Tracks, Strava, Garmin and most watches can export GPX.</span>
+        </label>
+        <div class="track-result" id="trackResult" hidden></div>
+        <p class="hint">Or type season averages. A lift ride and a run are often the same thing, unless you lap a gondola and then a chair.</p>
+        <h3 class="sub">Resort days</h3>
+        <div class="grid">
+          <label class="f">Resort days<input id="days" type="number" min="0" step="1" inputmode="numeric"></label>
+          <label class="f">Runs per day<input id="runs" type="number" min="0" step="1" inputmode="numeric"></label>
+          <label class="f">Lift rides per day<input id="rides" type="number" min="0" step="1" inputmode="numeric"></label>
+          <label class="f">Vertical per run (ft)<input id="vert" type="number" min="0" step="50" inputmode="numeric"></label>
+          <label class="f">Hours on snow per day<input id="hours" type="number" min="0" step="0.5" inputmode="decimal"></label>
+        </div>
+        <h3 class="sub">Backcountry days <span>no lifts, you earn every foot</span></h3>
+        <div class="grid">
+          <label class="f">Backcountry days<input id="bcDays" type="number" min="0" step="1" inputmode="numeric"></label>
+          <label class="f">Laps per day<input id="bcRuns" type="number" min="0" step="1" inputmode="numeric"></label>
+          <label class="f">Vertical per lap (ft)<input id="bcVert" type="number" min="0" step="50" inputmode="numeric"></label>
+          <label class="f">Hours out per day<input id="bcHours" type="number" min="0" step="0.5" inputmode="decimal"></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Lift access</legend>
+        <div class="seg" role="radiogroup" aria-label="How you pay for lifts">
+          <label><input type="radio" name="mode" id="modePass" value="pass"><span>Season pass</span></label>
+          <label><input type="radio" name="mode" id="modeDay" value="day"><span>Day tickets</span></label>
+        </div>
+        <label class="f wide">Pick a pass
+          <select id="passPreset"></select>
+        </label>
+        <p class="hint" id="passNote"></p>
+        <div class="grid">
+          <label class="f">Pass price<input id="passPrice" type="number" min="0" step="1" inputmode="decimal"></label>
+          <label class="f">Day ticket price<input id="dayPrice" type="number" min="0" step="1" inputmode="decimal"></label>
+        </div>
+        <p class="hint" id="ticketNote" style="margin:10px 0 0" hidden></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Gear</legend>
+        <p class="hint">Gear lasts more than one season, so each item is split across the seasons you expect it to last. Rentals go under travel &amp; extras as a per-day cost.</p>
+        <div class="row gear row-head gear-h"><span>Item</span><span>Cost</span><span>Seasons</span><span></span></div>
+        <div class="rows" id="gearRows"></div>
+        <button type="button" class="btn add" id="addGear">+ Add gear</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>Travel &amp; extras</legend>
+        <p class="hint">Gas, parking, lodging, lunch, lessons, tunes. Pick whether each is paid every ski day, only on resort days (parking, lodge lunch), or once for the season.</p>
+        <div class="row trav row-head trav-h"><span>Item</span><span>Amount</span><span>Paid</span><span></span></div>
+        <div class="rows" id="travRows"></div>
+        <button type="button" class="btn add" id="addTrav">+ Add cost</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>What you could do instead</legend>
+        <div class="basis" role="radiogroup" aria-label="Compare against">
+          <span>Compare against</span>
+          <label><input type="radio" name="basis" id="basisSeason" value="season"> the whole season</label>
+          <label><input type="radio" name="basis" id="basisDay" value="day"> one ski day</label>
+        </div>
+        <div class="row swap row-head"><span>Something else</span><span>Price</span><span></span></div>
+        <div class="rows" id="swapRows"></div>
+        <div class="add-row">
+          <button type="button" class="btn" id="addSwap">+ Add comparison</button>
+          <button type="button" class="btn" id="addInvest">+ Stock market</button>
+          <button type="button" class="btn" id="addPct">+ Share of a big expense</button>
+        </div>
+        <p class="hint" style="margin:10px 0 0">Knee replacement uses about $25,000, a typical all-in cash price at a surgery center. Hospital prices run much higher.</p>
+      </fieldset>
+    </form>
+
+    <aside class="receipt-col" aria-label="Your receipt">
+      <div class="receipt-shell"><div class="receipt" id="receipt"></div></div>
+      <div class="receipt-actions">
+        <button type="button" class="btn primary" id="pdfBtn" hidden>Download PDF</button>
+        <button type="button" class="btn" id="copyBtn">Copy receipt as text</button>
+        <button type="button" class="btn" id="reprintBtn">Reprint</button>
+      </div>
+      <div class="copied" id="copied" aria-live="polite"></div>
+      <pre id="fallbackText" hidden style="white-space:pre;overflow-x:auto;max-width:100%;font-family:var(--font-receipt);font-size:12px;background:var(--panel);border:1px solid var(--line);padding:10px;border-radius:6px"></pre>
+    </aside>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+(() => {
+  const KEY = 'ski-receipt-v1';
+  // Adult pass prices in USD, by season. Passes get pricier from spring launch to the December cutoff,
+  // so each season says which price it lists. Sources disagree on a few older figures.
+  const PASS_SEASONS = {
+    '2026–27': { note: 'Prices listed in early October 2026. They rise again through the fall.', groups: [
+      { group: 'Epic (Vail Resorts)', items: [
+        { id: 'epic', name: 'Epic Pass', price: 1145 },
+        { id: 'epic-local', name: 'Epic Local Pass', price: 849 },
+        { id: 'epic-ne', name: 'Northeast Value Pass', price: 690 },
+        { id: 'epic-day4', name: 'Epic Day Pass, 4 days', price: 546 },
+      ] },
+      { group: 'Ikon (Alterra)', items: [
+        { id: 'ikon', name: 'Ikon Pass', price: 1449 },
+        { id: 'ikon-base', name: 'Ikon Base Pass', price: 1019 },
+        { id: 'ikon-session4', name: 'Ikon Session Pass, 4 days', price: 529 },
+      ] },
+      { group: 'Other multi-resort passes', items: [
+        { id: 'mc', name: 'Mountain Collective', price: 729 },
+        { id: 'indy-plus', name: 'Indy+ Pass (sold out, waitlist)', price: 419 },
+        { id: 'indy-base', name: 'Indy Base Pass (sold out, waitlist)', price: 369 },
+        { id: 'boyne-freestyle', name: 'Boyne Freestyle Pass, 3 days', price: 429 },
+        { id: 'boyne-ne', name: 'Boyne New England Pass', price: 699 },
+      ] },
+      { group: 'Single mountain', items: [
+        { id: 'loveland', name: 'Loveland season pass', price: 699 },
+      ] },
+    ] },
+    '2025–26': { note: 'Spring 2025 launch prices. Late buyers paid more: the Epic Pass ended at $1,185 and Epic Local at $920.', groups: [
+      { group: 'Epic (Vail Resorts)', items: [
+        { id: 'epic', name: 'Epic Pass', price: 1051 },
+        { id: 'epic-local', name: 'Epic Local Pass', price: 783 },
+        { id: 'epic-ne', name: 'Northeast Value Pass', price: 698 },
+      ] },
+      { group: 'Ikon (Alterra)', items: [
+        { id: 'ikon', name: 'Ikon Pass', price: 1329 },
+        { id: 'ikon-base', name: 'Ikon Base Pass', price: 909 },
+      ] },
+      { group: 'Other multi-resort passes', items: [
+        { id: 'mc', name: 'Mountain Collective', price: 639 },
+        { id: 'indy-plus', name: 'Indy+ Pass', price: 599 },
+        { id: 'indy-base', name: 'Indy Base Pass', price: 449 },
+      ] },
+    ] },
+    '2024–25': { note: 'Spring 2024 launch prices. Passes bought in the fall cost more.', groups: [
+      { group: 'Epic (Vail Resorts)', items: [
+        { id: 'epic', name: 'Epic Pass', price: 982 },
+        { id: 'epic-local', name: 'Epic Local Pass', price: 731 },
+        { id: 'epic-ne', name: 'Northeast Value Pass', price: 600 },
+      ] },
+      { group: 'Ikon (Alterra)', items: [
+        { id: 'ikon', name: 'Ikon Pass', price: 1249 },
+        { id: 'ikon-base-plus', name: 'Ikon Base Plus Pass', price: 1119 },
+        { id: 'ikon-base', name: 'Ikon Base Pass', price: 869 },
+      ] },
+      { group: 'Other multi-resort passes', items: [
+        { id: 'mc', name: 'Mountain Collective', price: 605 },
+        { id: 'indy-plus', name: 'Indy+ Pass', price: 469 },
+        { id: 'indy-base', name: 'Indy Base Pass', price: 349 },
+      ] },
+    ] },
+    '2023–24': { note: 'Fall 2023 prices, near the end of sales. Spring buyers paid less.', groups: [
+      { group: 'Epic (Vail Resorts)', items: [
+        { id: 'epic', name: 'Epic Pass', price: 1025 },
+        { id: 'epic-local', name: 'Epic Local Pass', price: 795 },
+      ] },
+      { group: 'Ikon (Alterra)', items: [
+        { id: 'ikon', name: 'Ikon Pass', price: 1309 },
+        { id: 'ikon-base-plus', name: 'Ikon Base Plus Pass', price: 1199 },
+        { id: 'ikon-base', name: 'Ikon Base Pass', price: 979 },
+      ] },
+      { group: 'Other multi-resort passes', items: [
+        { id: 'mc', name: 'Mountain Collective', price: 650 },
+        { id: 'indy-plus', name: 'Indy+ Pass', price: 499 },
+        { id: 'indy-base', name: 'Indy Base Pass', price: 399 },
+      ] },
+    ] },
+  };
+  const passById = (id, season = state.season) => {
+    const sp = PASS_SEASONS[season];
+    return sp ? sp.groups.flatMap(g => g.items).find(p => p.id === id) : null;
+  };
+
+  // Major North American resorts, by region. Anything else goes in "Other mountain".
+  const RESORTS = [
+    ['Colorado', ['Arapahoe Basin', 'Aspen Snowmass', 'Beaver Creek', 'Breckenridge', 'Copper Mountain', 'Crested Butte', 'Eldora', 'Keystone', 'Loveland', 'Monarch', 'Purgatory', 'Steamboat', 'Telluride', 'Vail', 'Winter Park', 'Wolf Creek']],
+    ['Utah', ['Alta', 'Brighton', 'Deer Valley', 'Park City', 'Powder Mountain', 'Snowbasin', 'Snowbird', 'Solitude', 'Sundance']],
+    ['California & Nevada', ['Big Bear', 'Heavenly', 'Kirkwood', 'Mammoth Mountain', 'Mt. Rose', 'Northstar', 'Palisades Tahoe', 'Sierra-at-Tahoe', 'Sugar Bowl']],
+    ['Pacific Northwest', ['Crystal Mountain', 'Mission Ridge', 'Mt. Bachelor', 'Mt. Baker', 'Mt. Hood Meadows', 'Schweitzer', 'Stevens Pass', 'Summit at Snoqualmie', 'Timberline']],
+    ['Northern Rockies', ['Big Sky', 'Bridger Bowl', 'Grand Targhee', 'Jackson Hole', 'Sun Valley', 'Whitefish']],
+    ['Southwest', ['Arizona Snowbowl', 'Ski Santa Fe', 'Taos']],
+    ['Northeast', ['Bretton Woods', 'Cannon', 'Gore', 'Hunter', 'Jay Peak', 'Killington', 'Loon', 'Mad River Glen', 'Mount Snow', 'Okemo', 'Smugglers\' Notch', 'Stowe', 'Stratton', 'Sugarbush', 'Sugarloaf', 'Sunday River', 'Whiteface', 'Wildcat']],
+    ['Midwest & Mid-Atlantic', ['Boyne Mountain', 'Lutsen', 'Seven Springs', 'Snowshoe', 'Wintergreen']],
+    ['Canada', ['Banff Sunshine', 'Big White', 'Fernie', 'Kicking Horse', 'Lake Louise', 'Mont Tremblant', 'Red Mountain', 'Revelstoke', 'Sun Peaks', 'Whistler Blackcomb']],
+  ];
+  const RESORT_NAMES = new Set(RESORTS.flatMap(([, names]) => names));
+
+  // Adult one-day ticket at the window on a busy 2025–26 day, in the resort's own currency.
+  // Buying online ahead is usually cheaper.
+  const TICKETS = {
+    "Arapahoe Basin": [199, 'USD'],
+    "Aspen Snowmass": [279, 'USD'],
+    "Beaver Creek": [356, 'USD'],
+    "Breckenridge": [321, 'USD'],
+    "Copper Mountain": [274, 'USD'],
+    "Crested Butte": [239, 'USD'],
+    "Eldora": [199, 'USD'],
+    "Keystone": [292, 'USD'],
+    "Loveland": [149, 'USD'],
+    "Monarch": [129, 'USD'],
+    "Purgatory": [109, 'USD'],
+    "Steamboat": [339, 'USD'],
+    "Telluride": [328, 'USD'],
+    "Vail": [356, 'USD'],
+    "Winter Park": [287, 'USD'],
+    "Wolf Creek": [105, 'USD'],
+    "Alta": [199, 'USD'],
+    "Brighton": [149, 'USD'],
+    "Deer Valley": [329, 'USD'],
+    "Park City": [354, 'USD'],
+    "Powder Mountain": [172, 'USD'],
+    "Snowbasin": [229, 'USD'],
+    "Snowbird": [229, 'USD'],
+    "Solitude": [199, 'USD'],
+    "Sundance": [159, 'USD'],
+    "Big Bear": [158, 'USD'],
+    "Heavenly": [265, 'USD'],
+    "Kirkwood": [189, 'USD'],
+    "Mammoth Mountain": [219, 'USD'],
+    "Mt. Rose": [139, 'USD'],
+    "Northstar": [289, 'USD'],
+    "Palisades Tahoe": [289, 'USD'],
+    "Sierra-at-Tahoe": [150, 'USD'],
+    "Sugar Bowl": [249, 'USD'],
+    "Crystal Mountain": [199, 'USD'],
+    "Mission Ridge": [125, 'USD'],
+    "Mt. Bachelor": [224, 'USD'],
+    "Mt. Baker": [104, 'USD'],
+    "Mt. Hood Meadows": [169, 'USD'],
+    "Schweitzer": [138, 'USD'],
+    "Stevens Pass": [159, 'USD'],
+    "Summit at Snoqualmie": [125, 'USD'],
+    "Timberline": [170, 'USD'],
+    "Big Sky": [257, 'USD'],
+    "Bridger Bowl": [99, 'USD'],
+    "Grand Targhee": [175, 'USD'],
+    "Jackson Hole": [255, 'USD'],
+    "Sun Valley": [253, 'USD'],
+    "Whitefish": [115, 'USD'],
+    "Arizona Snowbowl": [309, 'USD'],
+    "Ski Santa Fe": [132, 'USD'],
+    "Taos": [179, 'USD'],
+    "Bretton Woods": [169, 'USD'],
+    "Cannon": [139, 'USD'],
+    "Gore": [124, 'USD'],
+    "Hunter": [179, 'USD'],
+    "Jay Peak": [135, 'USD'],
+    "Killington": [266, 'USD'],
+    "Loon": [149, 'USD'],
+    "Mad River Glen": [125, 'USD'],
+    "Mount Snow": [199, 'USD'],
+    "Okemo": [219, 'USD'],
+    "Smugglers' Notch": [125, 'USD'],
+    "Stowe": [239, 'USD'],
+    "Stratton": [209, 'USD'],
+    "Sugarbush": [199, 'USD'],
+    "Sugarloaf": [149, 'USD'],
+    "Sunday River": [159, 'USD'],
+    "Whiteface": [134, 'USD'],
+    "Wildcat": [154, 'USD'],
+    "Boyne Mountain": [120, 'USD'],
+    "Lutsen": [114, 'USD'],
+    "Seven Springs": [139, 'USD'],
+    "Snowshoe": [169, 'USD'],
+    "Wintergreen": [149, 'USD'],
+    "Banff Sunshine": [170, 'CAD'],
+    "Big White": [239, 'CAD'],
+    "Fernie": [189, 'CAD'],
+    "Kicking Horse": [175, 'CAD'],
+    "Lake Louise": [185, 'CAD'],
+    "Mont Tremblant": [185, 'CAD'],
+    "Red Mountain": [209, 'CAD'],
+    "Revelstoke": [155, 'CAD'],
+    "Sun Peaks": [199, 'CAD'],
+    "Whistler Blackcomb": [329, 'CAD']
+  };
+  const CAD_PER_USD = 1.38;
+  // A resort's window price in the currency the receipt uses, or null if it can't be matched.
+  function ticketFor(name) {
+    const t = TICKETS[name]; if (!t) return null;
+    const [price, cur] = t, want = state.currency;
+    if (cur === want) return { price, shown: price, cur };
+    if (cur === 'CAD' && want === 'USD') return { price: Math.round(price / CAD_PER_USD), shown: price, cur };
+    if (cur === 'USD' && want === 'CAD') return { price: Math.round(price * CAD_PER_USD), shown: price, cur };
+    return null;
+  }
+  const EXAMPLE = {
+    resort: 'Winter Park', skier: 'Guest', season: '2026–27', currency: 'USD',
+    days: 18, runs: 12, rides: 12, vert: 1400, hours: 5.5, bcDays: 4, bcRuns: 3, bcVert: 1800, bcHours: 6,
+    mode: 'pass', passPreset: 'ikon-base', passPrice: 1019, dayPrice: 287, track: null,
+    gear: [
+      { name: 'Skis + bindings', cost: 950, seasons: 5 },
+      { name: 'Boots', cost: 600, seasons: 5 },
+      { name: 'Jacket + pants', cost: 550, seasons: 4 },
+      { name: 'Helmet + goggles', cost: 280, seasons: 3 },
+      { name: 'Gloves, socks, layers', cost: 160, seasons: 2 },
+      { name: 'Skins + beacon, shovel, probe', cost: 650, seasons: 6 },
+    ],
+    trav: [
+      { name: 'Gas', amount: 32, per: 'day' },
+      { name: 'Parking', amount: 25, per: 'resort' },
+      { name: 'Lodge lunch + beer', amount: 31, per: 'resort' },
+      { name: 'Two nights lodging', amount: 380, per: 'season' },
+      { name: 'Tune + wax', amount: 90, per: 'season' },
+    ],
+    basis: 'season',
+    swaps: [
+      { kind: 'invest', name: 'Invest in the stock market', age: 35, retire: 65, rate: 7, every: 'year' },
+      { kind: 'percent', name: 'Knee replacement', price: 25000 },
+      { name: 'Breakfast burritos', price: 12 },
+      { name: 'National park annual passes', price: 80 },
+      { name: 'Round-trip flights', price: 340 },
+      { name: 'Used mountain bike', price: 1400 },
+    ],
+  };
+
+  const clone = o => JSON.parse(JSON.stringify(o));
+  let state = clone(EXAMPLE);
+  let edited = false;
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (saved && saved.state) {
+      // Receipts saved before backcountry days existed start with none.
+      if (!('bcDays' in saved.state)) Object.assign(saved.state, { bcDays: 0, bcRuns: 0, bcVert: 0, bcHours: 0 });
+      state = Object.assign(clone(EXAMPLE), saved.state); edited = !!saved.edited;
+    }
+  } catch (e) { /* storage unavailable: use example */ }
+
+  const $ = id => document.getElementById(id);
+  const num = v => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : 0; };
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ state, edited })); } catch (e) {} };
+
+  // ---------- money formatting ----------
+  const money = (n, digits = 2) => {
+    const d = state.currency === 'JPY' ? Math.max(0, digits - 2) : digits;
+    try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: state.currency, minimumFractionDigits: d, maximumFractionDigits: d }).format(n); }
+    catch (e) { return n.toFixed(d); }
+  };
+  const plain = n => new Intl.NumberFormat('en-US', { minimumFractionDigits: state.currency === 'JPY' ? 0 : 2, maximumFractionDigits: state.currency === 'JPY' ? 0 : 2 }).format(n);
+  const int = n => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n);
+  const per = (total, qty, digits) => qty > 0 ? money(total / qty, digits) : '—';
+
+  const passPreset = () => { const p = passById(state.passPreset); return p && num(state.passPrice) === p.price ? p : null; };
+  const passLabel = () => { const p = passPreset(); return p ? p.name.replace(/ \(.*\)$/, '') : 'Season pass'; };
+
+  // Stock market: put the money in an index fund instead, once or every year, until retirement.
+  // The return is after inflation, so the result is in today's dollars.
+  function investOutcome(s, amount) {
+    const age = num(s.age), retire = num(s.retire), r = num(s.rate) / 100, n = Math.max(0, Math.round(retire - age));
+    const yearly = s.every !== 'once';
+    const growth = Math.pow(1 + r, n);
+    const value = yearly ? (r > 0 ? amount * ((growth - 1) / r) * (1 + r) : amount * n) : amount * growth;
+    const note = yearly ? `Yearly from age ${int(age)} at ${num(s.rate)}%, in today's dollars` : `Once at age ${int(age)} at ${num(s.rate)}%, in today's dollars`;
+    return { kind: 'invest', name: s.name || 'Invest in the stock market', value, retire, note };
+  }
+  const swapValue = s => s.kind === 'invest' ? `${money(s.value, 0)} by ${int(s.retire)}`
+    : s.kind === 'percent' ? (s.pct >= 100 ? '× ' + fmtCount(s.pct / 100) : (s.pct < 1 ? '<1' : Math.round(s.pct)) + '% of one')
+    : '× ' + fmtCount(s.count);
+
+  // ---------- the math ----------
+  function calc() {
+    const rDays = num(state.days), runs = num(state.runs), rides = num(state.rides), vert = num(state.vert), hours = num(state.hours);
+    const bDays = num(state.bcDays), bRuns = num(state.bcRuns), bVert = num(state.bcVert), bHours = num(state.bcHours);
+    const days = rDays + bDays;
+    const passPrice = num(state.passPrice), dayPrice = num(state.dayPrice);
+    const lift = state.mode === 'pass'
+      ? [{ name: passLabel(), note: '', amount: passPrice }]
+      : [{ name: 'Day tickets', note: `${int(rDays)} @ ${plain(dayPrice)}`, amount: rDays * dayPrice }];
+    const gear = state.gear.map(g => {
+      const s = Math.max(1, num(g.seasons) || 1);
+      return { name: g.name || 'Gear', note: s > 1 ? `${plain(num(g.cost))} ÷ ${int(s)} seasons` : '', amount: num(g.cost) / s };
+    });
+    const trav = state.trav.map(t => {
+      if (t.per === 'season') return { name: t.name || 'Cost', note: '', amount: num(t.amount) };
+      const n = t.per === 'resort' ? rDays : days;
+      return { name: t.name || 'Cost', note: `${int(n)} ${t.per === 'resort' ? 'resort ' : ''}days @ ${plain(num(t.amount))}`, amount: num(t.amount) * n };
+    });
+    const sum = a => a.reduce((s, x) => s + x.amount, 0);
+    const subs = { lift: sum(lift), gear: sum(gear), trav: sum(trav) };
+    const total = subs.lift + subs.gear + subs.trav;
+    const totals = { days, rDays, bDays, runs: rDays * runs + bDays * bRuns, rides: rDays * rides,
+      vert: rDays * runs * vert + bDays * bRuns * bVert, bcVert: bDays * bRuns * bVert, hours: rDays * hours + bDays * bHours };
+
+    // pass vs tickets
+    let passCheck = null;
+    if (passPrice > 0 && dayPrice > 0 && rDays > 0) {
+      const ticketsCost = rDays * dayPrice, breakEven = Math.ceil(passPrice / dayPrice);
+      passCheck = { ticketsCost, breakEven, diff: ticketsCost - passPrice };
+    }
+    const perDay = days > 0 ? total / days : 0;
+    let rating = null;
+    if (days > 0) {
+      rating = perDay < 60 ? ['green', 'Green circle', 'Bargain hunter']
+        : perDay < 120 ? ['blue', 'Blue square', 'Getting pricey']
+        : perDay < 200 ? ['black', 'Black diamond', 'Expert spending']
+        : ['dbl', 'Double black', 'Experts only'];
+    }
+    const basisAmt = state.basis === 'day' ? perDay : total;
+    const swaps = state.swaps.map(s => {
+      if (s.kind === 'invest') return investOutcome(s, basisAmt);
+      if (!(num(s.price) > 0)) return null;
+      const count = basisAmt / num(s.price);
+      return s.kind === 'percent' ? { kind: 'percent', name: s.name || 'Something', pct: count * 100 } : { name: s.name || 'Something', count };
+    }).filter(Boolean);
+    return { lift, gear, trav, subs, total, totals, passCheck, perDay, rating, basisAmt, swaps };
+  }
+
+  // ---------- barcode ----------
+  function hash(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function barcode(seed) {
+    let x = seed || 1, pos = 4, rects = '';
+    const rnd = () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x; };
+    while (pos < 236) {
+      const w = 1 + (rnd() % 3), gap = 1 + (rnd() % 2);
+      rects += `<rect x="${pos}" y="0" width="${w}" height="46" fill="currentColor"/>`;
+      pos += w + gap;
+    }
+    return `<svg class="r-barcode" viewBox="0 0 240 46" preserveAspectRatio="none" aria-hidden="true">${rects}</svg>`;
+  }
+
+  const fmtCount = c => c >= 10 ? int(Math.floor(c)) : c >= 1 ? (Math.floor(c * 10) / 10).toString() : c.toFixed(2);
+
+  const trackLines = () => {
+    const k = state.track; if (!k) return [];
+    const out = [];
+    if (k.topMph) out.push(['Top speed (GPS)', Math.round(k.topMph) + ' mph']);
+    if (k.distMi) out.push(['Distance skied (GPS)', k.distMi.toFixed(1) + ' mi']);
+    return out;
+  };
+
+  const FINE_PRINT = 'No refunds due to weather, lack of skill, knowledge, preparation, traffic, or snow conditions.';
+
+  // ---------- receipt ----------
+  function renderReceipt() {
+    const r = calc();
+    const t = r.totals;
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
+    const txn = hash(JSON.stringify(state));
+    const line = (a, b, cls = '') => `<div class="r-line ${cls}"><span>${esc(a)}</span><span>${esc(b)}</span></div>`;
+    const items = arr => arr.map(i => line(i.name, plain(i.amount)) + (i.note ? `<div class="r-note">${esc(i.note)}</div>` : '')).join('');
+
+    let h = '';
+    h += `<div class="r-center"><div class="r-resort">${esc(state.resort || 'Your Mountain')}</div>`;
+    h += `<div class="r-sub">Ski day receipt · ${esc(state.season || '')}</div>`;
+    h += `<div class="r-meta">${dateStr} · Lift window 04 · Txn ${String(txn).slice(0, 6)}<br>Skier: ${esc(state.skier || '—')}</div></div>`;
+    h += `<hr class="r-rule">`;
+    h += `<div class="r-h">Lift access</div>${items(r.lift)}`;
+    if (r.gear.length) h += `<div class="r-h">Gear (this season's share)</div>${items(r.gear)}`;
+    if (r.trav.length) h += `<div class="r-h">Travel &amp; extras</div>${items(r.trav)}`;
+    h += `<hr class="r-rule">`;
+    h += line('Lift access', plain(r.subs.lift)) + line('Gear', plain(r.subs.gear)) + line('Travel & extras', plain(r.subs.trav));
+    h += `<hr class="r-rule double">`;
+    h += line('Season total', money(r.total), 'r-total');
+    h += `<hr class="r-rule">`;
+
+    h += `<div class="r-h">Your season on snow</div>`;
+    h += line('Resort days', int(t.rDays)) + (t.bDays ? line('Backcountry days', int(t.bDays)) : '')
+       + line('Runs', int(t.runs)) + line('Lift rides', int(t.rides)) + line('Vertical', int(t.vert) + ' ft')
+       + (t.bcVert ? `<div class="r-note">${int(t.bcVert)} ft earned on skins</div>` : '') + line('Hours on snow', int(t.hours));
+    trackLines().forEach(([a, b]) => { h += line(a, b); });
+    if (state.track) h += `<div class="r-note">GPS: ${int(state.track.days)} tracked day${state.track.days === 1 ? '' : 's'}</div>`;
+    h += `<hr class="r-rule">`;
+
+    h += `<div class="r-h">What it really cost</div>`;
+    h += `<div class="r-big">
+      <div><b>${per(r.total, t.days)}</b><small>per ski day</small></div>
+      <div><b>${per(r.total, t.runs)}</b><small>per run</small></div>
+      <div><b>${per(r.total, t.rides)}</b><small>per lift ride</small></div>
+      <div><b>${per(r.total, t.vert / 1000)}</b><small>per 1,000 vert ft</small></div>
+    </div>`;
+    h += line('Per vertical foot', per(r.total, t.vert, 4)) + line('Per hour on snow', per(r.total, t.hours));
+    if (t.bDays) h += line('Lift access per resort day', per(r.subs.lift, t.rDays));
+    if (r.rating) h += `<div class="r-rating"><span class="sym ${r.rating[0]}"></span>${r.rating[1]}: ${r.rating[2]}</div>`;
+
+    if (r.passCheck) {
+      const p = r.passCheck;
+      h += `<hr class="r-rule"><div class="r-h">Pass check</div>`;
+      h += line(`${int(t.rDays)} day tickets`, plain(p.ticketsCost));
+      h += line(passLabel(), plain(num(state.passPrice)));
+      if (state.mode === 'pass') {
+        h += p.diff >= 0 ? line('Pass saved you', money(p.diff)) : line('Tickets would have saved', money(-p.diff));
+        h += `<div class="r-note">Pass paid for itself on day ${int(p.breakEven)}</div>`;
+      } else {
+        h += p.diff > 0 ? line('A pass would have saved', money(p.diff)) : line('Tickets saved you', money(-p.diff));
+        h += `<div class="r-note">A pass pays off after ${int(p.breakEven)} days</div>`;
+      }
+    }
+
+    h += `<div class="r-box"><div class="r-h">What you could do for ${money(r.basisAmt, 0)} instead</div>`;
+    h += r.swaps.length ? r.swaps.map(s => line(s.name, swapValue(s)) + (s.note ? `<div class="r-note">${esc(s.note)}</div>` : '')).join('') : `<div class="r-note">Add something to compare</div>`;
+    h += `</div>`;
+
+    h += barcode(txn);
+    h += `<div class="r-foot">${esc(FINE_PRINT)}<br><br>Thank you for skiing at ${esc(state.resort || 'Your Mountain')}.<br>See you on the hill.</div>`;
+    $('receipt').innerHTML = h;
+  }
+
+  // ---------- plain-text receipt (for copying and the PDF) ----------
+  const receiptText = () => receiptLines().map(l => l.text).join('\n');
+  function receiptLines() {
+    const r = calc(), t = r.totals, W = 38;
+    const L = (a, b = '') => { a = String(a).toUpperCase(); b = String(b); const pad = W - a.length - b.length; return pad >= 1 ? a + ' '.repeat(pad) + b : a + '\n' + ' '.repeat(Math.max(0, W - b.length)) + b; };
+    const C = s => { s = String(s).toUpperCase(); const p = Math.max(0, Math.floor((W - s.length) / 2)); return ' '.repeat(p) + s; };
+    const rule = '-'.repeat(W), dbl = '='.repeat(W);
+    const out = [];
+    // Indented small print, word-wrapped to the receipt width
+    const note = str => {
+      let cur = '';
+      String(str).toUpperCase().split(' ').forEach(w => { if (cur && (cur + ' ' + w).length > W - 3) { out.push('   ' + cur); cur = w; } else cur = cur ? cur + ' ' + w : w; });
+      if (cur) out.push('   ' + cur);
+    };
+    const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+    out.push(C(state.resort || 'Your Mountain'), C('Ski day receipt ' + (state.season || '')), C(dateStr + ' - Skier: ' + (state.skier || '-')), rule);
+    const block = (title, arr) => { if (!arr.length) return; out.push(title.toUpperCase()); arr.forEach(i => { out.push(L(' ' + i.name, plain(i.amount))); if (i.note) note(i.note); }); };
+    block('Lift access', r.lift); block("Gear (this season's share)", r.gear); block('Travel & extras', r.trav);
+    out.push(dbl, L('Season total', money(r.total)), rule);
+    out.push(L('Resort days', int(t.rDays)));
+    if (t.bDays) out.push(L('Backcountry days', int(t.bDays)));
+    out.push(L('Runs', int(t.runs)), L('Lift rides', int(t.rides)), L('Vertical', int(t.vert) + ' ft'));
+    if (t.bcVert) note(int(t.bcVert) + ' ft earned on skins');
+    trackLines().forEach(([a, b]) => out.push(L(a, b)));
+    out.push(rule);
+    out.push(L('Per ski day', per(r.total, t.days)), L('Per run', per(r.total, t.runs)), L('Per lift ride', per(r.total, t.rides)),
+             L('Per 1,000 vert ft', per(r.total, t.vert / 1000)), L('Per vert ft', per(r.total, t.vert, 4)), L('Per hour', per(r.total, t.hours)));
+    if (t.bDays) out.push(L('Lift access per resort day', per(r.subs.lift, t.rDays)));
+    if (r.rating) out.push(C(r.rating[1] + ': ' + r.rating[2]));
+    if (r.passCheck) {
+      const p = r.passCheck; out.push(rule);
+      if (state.mode === 'pass') { out.push(p.diff >= 0 ? L('Pass saved you', money(p.diff)) : L('Tickets would have saved', money(-p.diff))); note('Pass paid for itself on day ' + p.breakEven); }
+      else { out.push(p.diff > 0 ? L('A pass would have saved', money(p.diff)) : L('Tickets saved you', money(-p.diff))); note('A pass pays off after ' + p.breakEven + ' days'); }
+    }
+    out.push(rule, C('For ' + money(r.basisAmt, 0) + ' you could get'));
+    r.swaps.forEach(s => { out.push(L(' ' + s.name, swapValue(s).replace('×', 'x'))); if (s.note) note(s.note); });
+    // Centered, word-wrapped footer
+    const wrapC = str => { let cur = ''; String(str).split(' ').forEach(w => { if (cur && (cur + ' ' + w).length > W) { out.push(C(cur)); cur = w; } else cur = cur ? cur + ' ' + w : w; }); if (cur) out.push(C(cur)); };
+    out.push(rule); wrapC(FINE_PRINT); out.push('');
+    wrapC('Thank you for skiing at ' + (state.resort || 'Your Mountain') + '.'); wrapC('See you on the hill.');
+    // Lines are strings; mark the ones the PDF sets in bold or large.
+    const bold = new Set([0, out.indexOf(dbl) + 1]);
+    return out.flatMap((text, i) => text.split('\n').map(t => ({ text: t, bold: bold.has(i), big: i === 0 })));
+  }
+
+  // ---------- form ----------
+  const fields = ['passPreset', 'resort', 'skier', 'season', 'currency', 'days', 'runs', 'rides', 'vert', 'hours', 'bcDays', 'bcRuns', 'bcVert', 'bcHours', 'passPrice', 'dayPrice'];
+
+  function rowHTML(kind, item, i) {
+    if (kind === 'gear') return `<div class="row gear">
+        <input id="gear-name-${i}" data-k="gear" data-i="${i}" data-f="name" type="text" value="${esc(item.name)}" aria-label="Gear item">
+        <input id="gear-cost-${i}" data-k="gear" data-i="${i}" data-f="cost" type="number" min="0" step="1" value="${esc(item.cost)}" aria-label="Cost">
+        <input id="gear-seasons-${i}" data-k="gear" data-i="${i}" data-f="seasons" type="number" min="1" step="1" value="${esc(item.seasons)}" aria-label="Seasons it lasts">
+        <button type="button" class="x" data-del="gear" data-i="${i}" aria-label="Remove ${esc(item.name)}">×</button></div>`;
+    if (kind === 'trav') return `<div class="row trav">
+        <input id="trav-name-${i}" data-k="trav" data-i="${i}" data-f="name" type="text" value="${esc(item.name)}" aria-label="Cost item">
+        <input id="trav-amount-${i}" data-k="trav" data-i="${i}" data-f="amount" type="number" min="0" step="1" value="${esc(item.amount)}" aria-label="Amount">
+        <select id="trav-per-${i}" data-k="trav" data-i="${i}" data-f="per" aria-label="How often">
+          <option value="day"${item.per === 'day' ? ' selected' : ''}>Every ski day</option>
+          <option value="resort"${item.per === 'resort' ? ' selected' : ''}>Resort days only</option>
+          <option value="season"${item.per === 'season' ? ' selected' : ''}>Once a season</option>
+        </select>
+        <button type="button" class="x" data-del="trav" data-i="${i}" aria-label="Remove ${esc(item.name)}">×</button></div>`;
+    if (item.kind === 'invest') return `<div class="invest">
+        <div class="row swap">
+          <input id="swap-name-${i}" data-k="swaps" data-i="${i}" data-f="name" type="text" value="${esc(item.name)}" aria-label="Comparison item">
+          <span class="tag">Grows</span>
+          <button type="button" class="x" data-del="swaps" data-i="${i}" aria-label="Remove ${esc(item.name)}">×</button>
+        </div>
+        <div class="grid">
+          <label class="f">Your age<input id="swap-age-${i}" data-k="swaps" data-i="${i}" data-f="age" type="number" min="0" step="1" value="${esc(item.age)}"></label>
+          <label class="f">Retire at<input id="swap-retire-${i}" data-k="swaps" data-i="${i}" data-f="retire" type="number" min="0" step="1" value="${esc(item.retire)}"></label>
+          <label class="f">Return per year (%)<input id="swap-rate-${i}" data-k="swaps" data-i="${i}" data-f="rate" type="number" min="0" step="0.5" value="${esc(item.rate)}"></label>
+          <label class="f">Invest it
+            <select id="swap-every-${i}" data-k="swaps" data-i="${i}" data-f="every">
+              <option value="year"${item.every !== 'once' ? ' selected' : ''}>Every year</option>
+              <option value="once"${item.every === 'once' ? ' selected' : ''}>Just once</option>
+            </select></label>
+        </div>
+        <p class="hint" style="margin:0">7% a year after inflation is close to the long-run US stock market average, so the result is in today's dollars. Past returns don't promise future ones.</p>
+      </div>`;
+    return `<div class="row swap">
+        <input id="swap-name-${i}" data-k="swaps" data-i="${i}" data-f="name" type="text" value="${esc(item.name)}" aria-label="Comparison item">
+        <input id="swap-price-${i}" data-k="swaps" data-i="${i}" data-f="price" type="number" min="0" step="1" value="${esc(item.price)}" aria-label="${item.kind === 'percent' ? 'Full price (shown as a percent)' : 'Price'}">
+        <button type="button" class="x" data-del="swaps" data-i="${i}" aria-label="Remove ${esc(item.name)}">×</button></div>`;
+  }
+  function renderRows() {
+    $('gearRows').innerHTML = state.gear.map((g, i) => rowHTML('gear', g, i)).join('');
+    $('travRows').innerHTML = state.trav.map((t, i) => rowHTML('trav', t, i)).join('');
+    $('swapRows').innerHTML = state.swaps.map((s, i) => rowHTML('swap', s, i)).join('');
+  }
+  function fillForm() {
+    ensureSeason();
+    fields.forEach(f => { if (f !== 'passPreset') $(f).value = state[f]; });
+    syncResort();
+    ticketNote(false);
+    renderPassOptions();
+    syncPreset();
+    $(state.mode === 'day' ? 'modeDay' : 'modePass').checked = true;
+    $(state.basis === 'day' ? 'basisDay' : 'basisSeason').checked = true;
+    renderRows();
+    $('exampleNote').hidden = edited;
+  }
+  function changed() { edited = true; $('exampleNote').hidden = true; save(); renderReceipt(); }
+
+  const form = $('form');
+  form.addEventListener('input', e => {
+    const el = e.target;
+    if (el.dataset.k) state[el.dataset.k][+el.dataset.i][el.dataset.f] = el.value;
+    else if (el.name === 'mode') state.mode = el.value;
+    else if (el.name === 'basis') state.basis = el.value;
+    else if (el.id === 'passPreset') {
+      state.passPreset = el.value;
+      const p = passById(el.value);
+      if (p) { state.passPrice = p.price; state.mode = 'pass'; $('passPrice').value = p.price; $('modePass').checked = true; }
+    }
+    else if (el.id === 'season') {
+      // A pass picked from the list follows the season: same pass, that season's price.
+      const had = passPreset();
+      state.season = el.value;
+      renderPassOptions();
+      const now = had && passById(had.id);
+      if (now) { state.passPrice = now.price; $('passPrice').value = now.price; }
+      syncPreset();
+    }
+    else if (el.id === 'resortPick') {
+      const other = el.value === '__other';
+      $('resort').hidden = !other;
+      if (other) { state.resort = ''; $('resort').value = ''; $('resort').focus(); } else state.resort = el.value;
+      const t = !other && ticketFor(el.value);
+      if (t) { state.dayPrice = t.price; $('dayPrice').value = t.price; }
+      ticketNote(!other);
+    }
+    else if (fields.includes(el.id)) { state[el.id] = el.value; if (el.id === 'passPrice') syncPreset(); if (el.id === 'dayPrice' || el.id === 'currency') ticketNote(false); }
+    else return;
+    changed();
+  });
+  form.addEventListener('submit', e => e.preventDefault());
+  form.addEventListener('click', e => {
+    const del = e.target.closest('[data-del]');
+    if (!del) return;
+    state[del.dataset.del].splice(+del.dataset.i, 1);
+    renderRows(); changed();
+  });
+  const addRow = (k, item, focusId) => { state[k].push(item); renderRows(); changed(); const el = $(focusId(state[k].length - 1)); if (el) el.focus(); };
+  $('addGear').onclick = () => addRow('gear', { name: '', cost: '', seasons: 3 }, i => `gear-name-${i}`);
+  $('addTrav').onclick = () => addRow('trav', { name: '', amount: '', per: 'day' }, i => `trav-name-${i}`);
+  $('addSwap').onclick = () => addRow('swaps', { name: '', price: '' }, i => `swap-name-${i}`);
+  $('addInvest').onclick = () => addRow('swaps', { kind: 'invest', name: 'Invest in the stock market', age: 35, retire: 65, rate: 7, every: 'year' }, i => `swap-age-${i}`);
+  $('addPct').onclick = () => addRow('swaps', { kind: 'percent', name: 'Knee replacement', price: 25000 }, i => `swap-name-${i}`);
+  $('resetBtn').onclick = () => { state = clone(EXAMPLE); edited = false; save(); $('trackResult').hidden = true; fillForm(); renderReceipt(); };
+
+  $('reprintBtn').onclick = () => { const r = $('receipt'); r.classList.remove('printing'); void r.offsetWidth; r.classList.add('printing'); };
+  $('copyBtn').onclick = () => {
+    const text = receiptText(), fb = $('fallbackText'), msg = $('copied');
+    fb.hidden = true;
+    const fallback = () => {
+      fb.textContent = text; fb.hidden = false;
+      const range = document.createRange(); range.selectNodeContents(fb);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      msg.textContent = 'Copying was blocked here. The text is selected below; copy it with your keyboard.';
+    };
+    try {
+      navigator.clipboard.writeText(text).then(() => { msg.textContent = 'Copied. Paste it anywhere.'; }, fallback);
+    } catch (e) { fallback(); }
+  };
+
+  // ---------- season picker ----------
+  // Next season back through ten past ones. A season starting in the fall belongs to that fall's year.
+  (() => {
+    const now = new Date(), start = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+    const label = y => `${y}–${String(y + 1).slice(2)}`;
+    const opts = [];
+    for (let y = start + 1; y >= start - 10; y--) opts.push(`<option value="${label(y)}">${label(y)}${y === start ? ' (this season)' : ''}</option>`);
+    $('season').innerHTML = opts.join('');
+  })();
+  // Keep a season saved earlier even if it isn't in the list.
+  const ensureSeason = () => {
+    const sel = $('season');
+    if (state.season && ![...sel.options].some(o => o.value === state.season)) sel.add(new Option(state.season, state.season));
+  };
+
+  // ---------- resort picker ----------
+  $('resortPick').innerHTML = RESORTS.map(([region, names]) =>
+    `<optgroup label="${esc(region)}">${names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>`).join('')
+    + '<option value="__other">Other mountain…</option>';
+  const syncResort = () => {
+    const known = RESORT_NAMES.has(state.resort);
+    $('resortPick').value = known ? state.resort : '__other';
+    $('resort').hidden = known;
+  };
+
+  // Explain where the day ticket price came from. After a pick, also say when there's no price on file.
+  function ticketNote(justPicked) {
+    const el = $('ticketNote'), t = ticketFor(state.resort);
+    if (t && num(state.dayPrice) === t.price) {
+      const from = t.cur === state.currency ? '' : ` (converted from ${t.cur} ${t.shown})`;
+      el.textContent = `Filled in from ${state.resort}'s 2025–26 window price on a busy day${from}. Buying online ahead is usually cheaper, so change it if you paid less.`;
+      el.hidden = false;
+    } else if (justPicked && state.resort && !TICKETS[state.resort]) {
+      el.textContent = `No ticket price on file for ${state.resort}. Type what you paid.`; el.hidden = false;
+    } else if (justPicked && TICKETS[state.resort]) {
+      el.textContent = `${state.resort}'s window price is listed in ${TICKETS[state.resort][1]}, so it wasn't filled in. Type what you paid.`; el.hidden = false;
+    } else el.hidden = true;
+  }
+
+  // ---------- pass picker ----------
+  const renderPassOptions = () => {
+    const sp = PASS_SEASONS[state.season];
+    $('passPreset').innerHTML = '<option value="">Custom price</option>' + (sp ? sp.groups.map(g =>
+      `<optgroup label="${esc(g.group)}">${g.items.map(p => `<option value="${p.id}">${esc(p.name)}: $${int(p.price)}</option>`).join('')}</optgroup>`).join('') : '');
+    $('passNote').textContent = sp
+      ? `Adult prices in US dollars for ${state.season}. ${sp.note} Fill in both prices below; the one you don't use gets compared on the receipt.`
+      : `No pass prices on file for ${state.season || 'this season'}. Type what you paid. Fill in both prices below; the one you don't use gets compared on the receipt.`;
+  };
+  const syncPreset = () => { $('passPreset').value = passPreset() ? state.passPreset : ''; };
+
+  // ---------- GPS tracks ----------
+  // Read track points out of GPX, TCX or KML. Each point: lat, lon, ele (m), t (ms or null).
+  function readTrack(text) {
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length) throw new Error('not valid XML');
+    const all = (el, name) => Array.from(el.getElementsByTagNameNS('*', name));
+    const val = (el, name) => { const c = all(el, name)[0]; return c ? c.textContent.trim() : null; };
+    const time = s => { const t = s ? Date.parse(s) : NaN; return isFinite(t) ? t : null; };
+    let pts = [];
+    // GPX
+    all(doc, 'trkpt').concat(all(doc, 'rtept')).forEach(p => pts.push({
+      lat: +p.getAttribute('lat'), lon: +p.getAttribute('lon'), ele: parseFloat(val(p, 'ele')), t: time(val(p, 'time')) }));
+    // TCX
+    all(doc, 'Trackpoint').forEach(p => pts.push({
+      lat: parseFloat(val(p, 'LatitudeDegrees')), lon: parseFloat(val(p, 'LongitudeDegrees')),
+      ele: parseFloat(val(p, 'AltitudeMeters')), t: time(val(p, 'Time')) }));
+    // KML: gx:Track (with times) or plain LineString coordinates
+    all(doc, 'Track').forEach(tr => {
+      const whens = all(tr, 'when'), coords = all(tr, 'coord');
+      coords.forEach((c, i) => { const [lon, lat, ele] = c.textContent.trim().split(/\s+/).map(Number);
+        pts.push({ lat, lon, ele, t: whens[i] ? time(whens[i].textContent.trim()) : null }); });
+    });
+    if (!pts.length) all(doc, 'LineString').forEach(ls => (val(ls, 'coordinates') || '').split(/\s+/).forEach(c => {
+      const [lon, lat, ele] = c.split(',').map(Number); if (isFinite(lat)) pts.push({ lat, lon, ele, t: null }); }));
+    return pts.filter(p => isFinite(p.lat) && isFinite(p.lon) && isFinite(p.ele));
+  }
+
+  const metersBetween = (a, b) => {
+    const R = 6371000, rad = Math.PI / 180, dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  };
+
+  // One day of points -> runs, lift rides, vertical, distance, top speed, hours.
+  function analyzeDay(pts) {
+    const n = pts.length, MIN_LEG = 30; // a climb or drop must be 30 m to count, so GPS noise and small bumps are ignored
+    // Smooth elevation with a short moving average.
+    const ele = pts.map((_, i) => { let s = 0, c = 0; for (let j = Math.max(0, i - 2); j <= Math.min(n - 1, i + 2); j++) { s += pts[j].ele; c++; } return s / c; });
+    // Find the turning points (tops and bottoms) of the elevation profile.
+    const turns = [0];
+    let dir = 0, piv = 0, hi = 0, lo = 0;
+    for (let i = 1; i < n; i++) {
+      if (dir === 0) {
+        if (ele[i] > ele[hi]) hi = i;
+        if (ele[i] < ele[lo]) lo = i;
+        if (ele[hi] - ele[lo] >= MIN_LEG) {
+          if (hi < lo) { turns.push(hi); dir = -1; piv = lo; } else { turns.push(lo); dir = 1; piv = hi; }
+        }
+      } else if (dir === 1) {
+        if (ele[i] > ele[piv]) piv = i; else if (ele[piv] - ele[i] >= MIN_LEG) { turns.push(piv); dir = -1; piv = i; }
+      } else {
+        if (ele[i] < ele[piv]) piv = i; else if (ele[i] - ele[piv] >= MIN_LEG) { turns.push(piv); dir = 1; piv = i; }
+      }
+    }
+    if (dir !== 0) turns.push(piv);
+    // A lift ride climbs and travels in a nearly straight line, start to finish.
+    // Path length is measured on points at least 25 m apart so GPS jitter doesn't make a lift look wiggly.
+    const straightness = (a, b) => {
+      let path = 0, last = a;
+      for (let i = a + 1; i <= b; i++) { const d = metersBetween(pts[last], pts[i]); if (d >= 25 || i === b) { path += d; last = i; } }
+      return path > 0 ? metersBetween(pts[a], pts[b]) / path : 0;
+    };
+    const legs = [];
+    for (let k = 1; k < turns.length; k++) {
+      const a = turns[k - 1], b = turns[k], drop = ele[a] - ele[b];
+      // Lifts also climb fast (chairs and gondolas gain well over 900 m an hour); skinning is much slower.
+      const secs = pts[a].t != null && pts[b].t != null ? (pts[b].t - pts[a].t) / 1000 : null;
+      const fastClimb = secs == null || secs <= 0 || -drop / secs >= 0.25;
+      legs.push({ a, b, drop, lift: drop <= -MIN_LEG && fastClimb && straightness(a, b) >= 0.85 });
+    }
+    // A run ends at a lift ride or at a long climb under your own power (a skin track, 100 m or more).
+    // Shorter hikes or skates uphill stay part of the run around them.
+    let runs = 0, rides = 0, vertM = 0, distM = 0, topMs = 0, runDrop = 0;
+    const endRun = () => { if (runDrop >= MIN_LEG) { runs++; vertM += runDrop; } runDrop = 0; };
+    legs.forEach(({ a, b, drop, lift }) => {
+      if (lift) { endRun(); rides++; return; }
+      if (drop <= -100) { endRun(); return; }
+      if (drop <= 0) return;
+      runDrop += drop;
+      for (let i = a + 1; i <= b; i++) distM += metersBetween(pts[i - 1], pts[i]);
+      // Top speed: measured over at least 5 seconds to calm GPS jitter; anything over 160 km/h is a glitch.
+      for (let i = a, j = a; i <= b; i++) {
+        if (pts[i].t == null) break;
+        while (j < i && pts[i].t - pts[j + 1].t >= 5000) j++;
+        const dt = (pts[i].t - pts[j].t) / 1000;
+        if (dt >= 5) { let d = 0; for (let q = j + 1; q <= i; q++) d += metersBetween(pts[q - 1], pts[q]); const v = d / dt; if (v < 44 && v > topMs) topMs = v; }
+      }
+    });
+    endRun();
+    const t0 = pts[0].t, t1 = pts[n - 1].t;
+    return { runs, rides, vertM, distM, topMs, hours: t0 != null && t1 != null ? (t1 - t0) / 3600000 : null };
+  }
+
+  // Split all points into ski days (by local date), then add the days up.
+  function analyzeFiles(files) {
+    const byDay = new Map();
+    files.forEach((f, fi) => f.pts.forEach(p => {
+      const key = p.t != null ? new Date(p.t).toDateString() : 'file-' + fi;
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key).push(p);
+    }));
+    const days = [...byDay.values()].filter(d => d.length > 10).map(d => analyzeDay(d.some(p => p.t == null) ? d : d.sort((a, b) => a.t - b.t)));
+    // A day with runs but no lift rides is a backcountry day.
+    const group = list => {
+      const sum = k => list.reduce((s, d) => s + (d[k] || 0), 0);
+      return { days: list.length, runs: sum('runs'), rides: sum('rides'), vertFt: sum('vertM') * 3.28084, distMi: sum('distM') / 1609.344,
+        hours: list.length && list.every(d => d.hours != null) ? sum('hours') : null };
+    };
+    const skied = days.filter(d => d.runs > 0);
+    const all = group(skied);
+    return Object.assign(all, { resort: group(skied.filter(d => d.rides > 0)), bc: group(skied.filter(d => d.rides === 0)),
+      topMph: Math.max(0, ...skied.map(d => d.topMs)) * 2.23694 });
+  }
+
+  let pendingTrack = null;
+  function showTrack(res, fileCount) {
+    const box = $('trackResult');
+    box.hidden = false; box.classList.remove('err');
+    if (!res.days || !res.runs) {
+      box.classList.add('err');
+      box.innerHTML = `<span>No ski runs found in ${fileCount === 1 ? 'that file' : 'those files'}. The track needs elevation data and at least one descent of 30 m (100 ft). Lift rides are the fast, straight-line climbs between runs.</span>`;
+      pendingTrack = null; return;
+    }
+    pendingTrack = res;
+    const d = res.days, rd = res.resort.days, bd = res.bc.days;
+    const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    const kinds = [rd ? plural(rd, 'resort day') : '', bd ? plural(bd, 'backcountry day') : ''].filter(Boolean).join(' and ');
+    box.innerHTML = `<div><strong>${kinds} found</strong> in ${plural(fileCount, 'file')}</div>
+      <div class="track-stats">
+        <span><b>${int(res.runs)}</b> runs</span><span><b>${int(res.rides)}</b> lift rides</span>
+        <span><b>${int(res.vertFt)}</b> ft vertical</span><span><b>${res.distMi.toFixed(1)}</b> mi skied</span>
+        ${res.topMph ? `<span><b>${Math.round(res.topMph)}</b> mph top speed</span>` : ''}
+        ${res.hours != null ? `<span><b>${(res.hours / d).toFixed(1)}</b> hours per day</span>` : ''}
+      </div>
+      <div class="track-actions">
+        <button type="button" class="btn primary" id="useTrack">Use these stats</button>
+        <label><input type="checkbox" id="trackSetDays"${d > 1 ? ' checked' : ''}> Set ${[rd ? 'resort days to ' + rd : '', bd ? 'backcountry days to ' + bd : ''].filter(Boolean).join(' and ')}</label>
+      </div>`;
+    $('useTrack').onclick = applyTrack;
+  }
+  function applyTrack() {
+    const r = pendingTrack; if (!r) return;
+    const d = r.days, rs = r.resort, bc = r.bc, setDays = $('trackSetDays').checked;
+    const halfHours = (h, n) => Math.round(h / n * 2) / 2;
+    if (rs.days) {
+      state.runs = Math.round(rs.runs / rs.days);
+      state.rides = Math.round(rs.rides / rs.days);
+      state.vert = Math.round(rs.vertFt / rs.runs / 10) * 10;
+      if (rs.hours != null) state.hours = halfHours(rs.hours, rs.days);
+      if (setDays) state.days = rs.days;
+    }
+    if (bc.days) {
+      state.bcRuns = Math.round(bc.runs / bc.days);
+      state.bcVert = Math.round(bc.vertFt / bc.runs / 10) * 10;
+      if (bc.hours != null) state.bcHours = halfHours(bc.hours, bc.days);
+      if (setDays) state.bcDays = bc.days;
+    }
+    state.track = { days: d, distMi: r.distMi, topMph: r.topMph };
+    fillForm(); changed();
+    $('trackResult').innerHTML = `<span>Stats applied from ${d} tracked day${d === 1 ? '' : 's'}: averages per day are filled in below. Top speed and distance are on the receipt. <button type="button" class="btn" id="dropTrack">Remove GPS stats</button></span>`;
+    $('dropTrack').onclick = () => { state.track = null; $('trackResult').hidden = true; changed(); };
+  }
+  async function loadFiles(list) {
+    const files = Array.from(list || []);
+    if (!files.length) return;
+    const box = $('trackResult');
+    const parsed = [], bad = [];
+    for (const f of files) {
+      if (/\.fit$/i.test(f.name)) { bad.push(f.name + ' (FIT files are binary; export GPX instead)'); continue; }
+      try { const pts = readTrack(await f.text()); if (pts.length) parsed.push({ name: f.name, pts }); else bad.push(f.name + ' (no points with elevation)'); }
+      catch (e) { bad.push(f.name + ' (could not be read as GPX, TCX or KML)'); }
+    }
+    if (!parsed.length) {
+      box.hidden = false; box.classList.add('err');
+      box.innerHTML = `<span>Couldn't use ${bad.map(esc).join(', ')}.</span>`; pendingTrack = null; return;
+    }
+    showTrack(analyzeFiles(parsed), parsed.length);
+    if (bad.length) box.insertAdjacentHTML('beforeend', `<div class="hint" style="margin:0">Skipped: ${bad.map(esc).join(', ')}</div>`);
+  }
+  $('trackFile').addEventListener('change', e => { loadFiles(e.target.files); e.target.value = ''; });
+  const dz = $('dropZone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); loadFiles(e.dataTransfer.files); });
+
+  // ---------- PDF ----------
+  // A receipt-shaped page, 80 mm wide like real thermal paper, drawn in Courier.
+  function makePdf() {
+    const { jsPDF } = window.jspdf;
+    const lines = receiptLines();
+    const W = 80, M = 7.5, LH = 3.7, top = 10, barH = 12;
+    const H = top + lines.length * LH + LH + 6 + barH + 10;
+    const doc = new jsPDF({ unit: 'mm', format: [W, H], orientation: 'portrait' });
+    // PDF's built-in Courier only knows Latin-1 characters.
+    const clean = s => s.replace(/[–—]/g, '-').replace(/×/g, 'x').replace(/÷/g, '/').replace(/·/g, '-').replace(/€/g, 'EUR ').replace(/[^\x20-\xFF]/g, '?');
+    doc.setFillColor(251, 250, 245); doc.rect(0, 0, W, H, 'F');
+    doc.setTextColor(30, 28, 25);
+    let y = top;
+    lines.forEach(l => {
+      doc.setFont('courier', l.bold ? 'bold' : 'normal');
+      if (l.big) { doc.setFontSize(11); doc.text(clean(l.text.trim()), W / 2, y, { align: 'center' }); y += LH + 1; return; }
+      doc.setFontSize(8);
+      doc.text(clean(l.text), M, y);
+      y += LH;
+    });
+    // Barcode from the same seed as the on-screen receipt
+    y += 3;
+    let x = hash(JSON.stringify(state)) || 1, pos = M;
+    const rnd = () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x; };
+    doc.setFillColor(30, 28, 25);
+    const unit = (W - 2 * M) / 240;
+    for (let u = 4; u < 236;) { const w = 1 + (rnd() % 3), gap = 1 + (rnd() % 2); doc.rect(M + u * unit, y, w * unit, barH, 'F'); u += w + gap; }
+    return doc.output('blob');
+  }
+  const fileName = () => ((state.resort || 'ski') + '-receipt-' + (state.season || '')).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.pdf';
+
+  // Inside the Claude viewer, saves go through its download prompt. Opened as an ordinary
+  // web page, the browser downloads the file directly.
+  const browserSave = { save: async ({ filename, data }) => {
+    const url = URL.createObjectURL(data), a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return { status: 'saved' };
+  } };
+  let downloads = null;
+  Promise.resolve(window.claude && window.claude.use ? window.claude.use('downloads') : browserSave).then(d => {
+    downloads = d;
+    if (downloads && window.jspdf) $('pdfBtn').hidden = false;
+  }, () => {});
+  $('pdfBtn').onclick = async () => {
+    const msg = $('copied');
+    try {
+      await downloads.save({ filename: fileName(), data: makePdf() });
+      msg.textContent = 'Receipt saved as a PDF.';
+    } catch (e) {
+      const code = e && e.code;
+      if (code === 'declined') msg.textContent = '';
+      else if (code === 'rate_limited') msg.textContent = 'A save prompt is already open. Finish that one first.';
+      else { msg.textContent = 'PDF download isn\'t available here. Use "Copy receipt as text" instead.'; $('pdfBtn').hidden = true; }
+    }
+  };
+
+  fillForm();
+  renderReceipt();
+})();
+</script>
+
+</body>
+</html>
