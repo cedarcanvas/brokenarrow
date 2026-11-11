@@ -30,6 +30,8 @@
   --data: #2f6f9b; --data-dim: #d8d0c3; --dot: #c2531f;
   --seq-1: #a3c8e4; --seq-2: #7cabcf; --seq-3: #548db7; --seq-4: #2f6f9b; --seq-5: #175076;
   --band: #2b2724; --band-ink: #f6f3ed; --shadow: rgba(43, 39, 36, .2);
+  /* Seven activity groups, in GROUPS order (dataviz categorical slots 1-7, validated on this paper) */
+  --g0: #2a78d6; --g1: #eb6834; --g2: #1baf7a; --g3: #eda100; --g4: #e87ba4; --g5: #008300; --g6: #6250d6;
   --serif: "Libre Baskerville", Georgia, serif;
   --sans: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
 }
@@ -42,6 +44,7 @@
     --data: #79a7cb; --data-dim: #3a332b; --dot: #f08a4b;
     --seq-1: #224d6c; --seq-2: #356a90; --seq-3: #5188b0; --seq-4: #79a7cb; --seq-5: #a8c9e2;
     --band: #0d0b09; --band-ink: #f1ece4; --shadow: rgba(0, 0, 0, .55);
+    --g0: #3987e5; --g1: #d95926; --g2: #199e70; --g3: #c98500; --g4: #d55181; --g5: #008300; --g6: #9085e9;
     color-scheme: dark;
   }
 }
@@ -53,6 +56,7 @@
   --data: #79a7cb; --data-dim: #3a332b; --dot: #f08a4b;
   --seq-1: #224d6c; --seq-2: #356a90; --seq-3: #5188b0; --seq-4: #79a7cb; --seq-5: #a8c9e2;
   --band: #0d0b09; --band-ink: #f1ece4; --shadow: rgba(0, 0, 0, .55);
+  --g0: #3987e5; --g1: #d95926; --g2: #199e70; --g3: #c98500; --g4: #d55181; --g5: #008300; --g6: #9085e9;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -237,6 +241,19 @@ h2 { font: 700 22px/1.2 var(--serif); margin: 0; letter-spacing: 0; text-wrap: b
 .lg-dots svg { overflow: visible; }
 .lg-dots .dot { fill-opacity: .92; }
 
+/* Activity by decade (stacked columns) */
+.eras .seg-bar { stroke: var(--paper); stroke-width: 2; paint-order: stroke; cursor: pointer; transition: opacity .15s; }
+.eras .seg-bar.dim { opacity: .28; }
+.eras .era-total { font: 700 12.5px var(--sans); fill: var(--ink); font-variant-numeric: tabular-nums; pointer-events: none; }
+.eras-legend { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.eras-legend button {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule); background: var(--chip); border-radius: 999px;
+  padding: 4px 10px 4px 8px; cursor: pointer; font: 500 13px/1.1 var(--sans); color: var(--ink);
+}
+.eras-legend button:hover { border-color: var(--ink-2); }
+.eras-legend button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.eras-legend i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+
 /* Who / when / where */
 .trio { display: grid; gap: 36px 40px; }
 @media (min-width: 720px) { .trio { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -385,6 +402,16 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
       <div class="chart" id="states"></div>
     </section>
   </div>
+
+  <section class="sec eras" aria-labelledby="h-era">
+    <div class="sec-head">
+      <h2 id="h-era">How it has changed, decade by decade</h2>
+      <p>Deaths per winter, by decade and by what people were doing. Click a color to filter the whole page.</p>
+    </div>
+    <div class="eras-legend" id="eras-legend" role="group" aria-label="Activity groups"></div>
+    <div class="chart" id="eras"></div>
+    <p class="note" id="eras-note"></p>
+  </section>
 
   <section class="sec" aria-labelledby="h-log">
     <div class="sec-head">
@@ -1153,6 +1180,71 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
       .on("focus", (ev, d) => showTip(box, [x(d.key) + x.bandwidth() / 2, y(d.value)], tip(d)));
   }
 
+  // ---- Deaths per winter by decade, stacked by activity group. Ignores the winters and group filters
+  // (it is the time view), but follows the state and month filters.
+  function renderEras() {
+    const box = $("#eras");
+    const w = Math.max(280, box.clientWidth), h = w < 520 ? 250 : 290, m = { t: 22, r: 4, b: 26, l: 30 };
+    const data = rows.filter(d => (filt.state === null || d.state === filt.state) && (filt.month === null || d.month === filt.month));
+    const bin = s => Math.floor((s - 1) / 10) * 10;
+    const decades = [...new Set(SEASONS.map(bin))];
+    const winters = new Map(decades.map(dc => [dc, SEASONS.filter(s => bin(s) === dc).length]));
+    const stacks = decades.map(dc => {
+      const inDec = data.filter(d => bin(d.season) === dc);
+      let y0 = 0;
+      const parts = GROUPS.map((label, key) => {
+        const v = sum(inDec.filter(d => d.group === key)) / winters.get(dc);
+        const part = { key, label, dc, v, y0, y1: y0 + v, deaths: sum(inDec.filter(d => d.group === key)) };
+        y0 += v; return part;
+      });
+      return { dc, total: y0, parts, n: winters.get(dc) };
+    });
+    const x = d3.scaleBand(decades, [m.l, w - m.r]).paddingInner(0.22);
+    const y = d3.scaleLinear([0, Math.max(1, d3.max(stacks, d => d.total))], [h - m.b, m.t]).nice(4);
+    const svg = d3.select(box).selectAll("svg").data([0]).join("svg").attr("width", w).attr("height", h).attr("viewBox", `0 0 ${w} ${h}`);
+    const ticks = y.ticks(4).filter(t => Number.isInteger(t) && t > 0);
+    svg.selectAll("g.grid").data([0]).join("g").attr("class", "grid").selectAll("g.tick").data(ticks, t => t).join(enter => {
+      const g = enter.append("g").attr("class", "tick"); g.append("line"); g.append("text").attr("text-anchor", "end").attr("dy", "0.32em"); return g;
+    }).call(g => {
+      g.select("line").attr("x1", m.l).attr("x2", w - m.r).attr("y1", t => Math.round(y(t)) + 0.5).attr("y2", t => Math.round(y(t)) + 0.5);
+      g.select("text").attr("x", m.l - 6).attr("y", t => y(t)).text(t => t);
+    });
+    svg.selectAll("line.base").data([0]).join("line").attr("class", "base").attr("x1", m.l).attr("x2", w - m.r).attr("y1", h - m.b + 0.5).attr("y2", h - m.b + 0.5);
+    const cols = svg.selectAll("g.era").data(stacks, d => d.dc).join(enter => enter.append("g").attr("class", "era"));
+    cols.each(function (st) {
+      d3.select(this).selectAll("rect.seg-bar").data(st.parts.filter(p => p.v > 0), p => p.key).join("rect").attr("class", "seg-bar")
+        .attr("fill", p => `var(--g${p.key})`)
+        .attr("x", x(st.dc)).attr("width", x.bandwidth())
+        .attr("y", p => y(p.y1)).attr("height", p => Math.max(0, y(p.y0) - y(p.y1)))
+        .classed("dim", p => filt.group !== null && filt.group !== p.key)
+        .on("click", (ev, p) => { filt.group = filt.group === p.key ? null : p.key; update(); })
+        .on("pointermove", (ev, p) => showTip(box, d3.pointer(ev, box), [
+          ["t-kick", `${st.dc}s · ${st.n} winter${st.n === 1 ? "" : "s"}`], ["t-val", p.label],
+          ["t-meta", `${fmt1(p.v)} deaths a winter (${fmt(p.deaths)} in all)`],
+          ["t-meta", `Whole decade: ${fmt1(st.total)} a winter`]]))
+        .on("pointerleave", () => hideTip(box));
+    });
+    cols.selectAll("text.era-total").data(d => [d]).join("text").attr("class", "era-total").attr("text-anchor", "middle")
+      .attr("x", d => x(d.dc) + x.bandwidth() / 2).attr("y", d => y(d.total) - 6).text(d => (d.total ? fmt1(d.total) : ""));
+    cols.selectAll("text.axis-lbl").data(d => [d]).join("text").attr("class", "axis-lbl").attr("text-anchor", "middle")
+      .attr("x", d => x(d.dc) + x.bandwidth() / 2).attr("y", h - 8).text(d => (w < 420 ? `'${String(d.dc).slice(2)}s` : `${d.dc}s`));
+    const legend = $("#eras-legend");
+    if (!legend.childElementCount) {
+      GROUPS.forEach((label, key) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.dataset.key = key;
+        const sw = document.createElement("i"); sw.style.background = `var(--g${key})`;
+        b.append(sw, label);
+        b.addEventListener("click", () => { filt.group = filt.group === key ? null : key; update(); });
+        legend.append(b);
+      });
+    }
+    for (const b of legend.children) b.setAttribute("aria-pressed", String(filt.group === +b.dataset.key));
+    const last = stacks[stacks.length - 1];
+    $("#eras-note").textContent = `Each column is the average over that decade's winters, so a decade with fewer winters still compares fairly.` +
+      (last.n < 10 ? ` The ${last.dc}s so far have ${last.n} winters.` : "");
+  }
+
   // ---- Accident log (the table view of everything above)
   let logShown = 25;
   function renderLog() {
@@ -1204,6 +1296,7 @@ table.log { width: 100%; min-width: 660px; border-collapse: collapse; font-size:
     renderMap();
     renderGroups();
     renderMonths();
+    renderEras();
     renderStates();
     renderLog();
   }
