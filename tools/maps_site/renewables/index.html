@@ -14,17 +14,22 @@
   <meta property="og:url" content="https://maps.ridgelinemaps.com/renewables/">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Libre+Franklin:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <aside id="panel">
     <header>
+      <p class="kicker">Energy &middot; North America &middot; Updated hourly</p>
       <div class="title-row">
         <h1>North American Renewables Map</h1>
         <button id="theme" type="button" title="Colour theme: auto (follows your system), light or dark">◐ Auto</button>
       </div>
       <p class="sub">Prototype. Plant output is <strong>estimated</strong> by splitting each grid region's
         hourly total among its plants<span id="weighting"></span>. Ontario's and Alberta's large plants are metered.</p>
+      <p class="rm-links"><a href="../">&larr; All interactive maps</a><span aria-hidden="true"> · </span><a href="https://ridgelinemaps.com">ridgelinemaps.com</a></p>
     </header>
 
     <section id="time" class="card">
@@ -117,12 +122,22 @@
     </section>
 
     <footer class="muted small">
+      <p class="byline">Map by Mike Floyd, Ridgeline Maps</p>
       <p>Circle area is proportional to MW: the outline is nameplate capacity, the solid fill is the
         estimate for the selected hour. A grey outline means that plant's region has no data for the hour yet.
         Violet lines are grid regions; US ones are approximate and some overlap. Click inside one for its totals.
         Moving lines show wind at 100 m, about turbine hub height; brighter lines are faster wind.</p>
       <p id="sources"></p>
     </footer>
+
+    <section class="promo" aria-label="Prints and custom maps">
+      <h2>Need a map like this?</h2>
+      <p>Ridgeline Maps makes custom maps of energy, weather and the places you care about, for print, web and video.</p>
+      <div class="links">
+        <a class="buy" href="https://ridgelinemaps.com/custom-maps">Commission a custom map</a>
+        <a href="https://ridgelinemaps.com/store">Shop map prints</a>
+      </div>
+    </section>
   </aside>
 
   <main id="map"></main>

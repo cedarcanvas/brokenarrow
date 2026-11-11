@@ -283,7 +283,7 @@
       // Twin cities with the same name (Kansas City MO/KS): label only one.
       if (named.some(q => q[0] === c.name && Math.abs(q[1] - sx) + Math.abs(q[2] - sy) < 60)) continue;
       const big = c.tier === 1;
-      ctx.font = `${big ? 600 : 500} ${(big ? 12 : 11) - (small ? 1 : 0)}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+      ctx.font = `${big ? 600 : 500} ${(big ? 12 : 11) - (small ? 1 : 0)}px 'Libre Franklin', 'Helvetica Neue', Arial, sans-serif`;
       const w = ctx.measureText(c.name).width, h = big ? 13 : 12;
       // Label to the right of the dot; try the left side if that's taken.
       // Labels in an inset box stay inside that box.
@@ -313,7 +313,7 @@
   function drawPrefixes(placed) {
     if (S.t.k < 2.5) return;
     const C = S.colors;
-    ctx.font = "600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "700 11px 'Libre Franklin', 'Helvetica Neue', Arial, sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
     for (let i = 0; i < S.N; i++) {
       const z = S.zip3[i];
@@ -396,7 +396,7 @@
     // Hovered and "nearest" labels first so they always win a spot.
     labels.sort((a, b) => (b[0] === S.hoverHub) - (a[0] === S.hoverHub) || (near && (b[0] === near.h) - (a[0] === near.h)));
     ctx.textBaseline = "middle"; ctx.lineJoin = "round";
-    ctx.font = "italic 500 11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+    ctx.font = "italic 500 11px 'Libre Franklin', 'Helvetica Neue', Arial, sans-serif";
     for (const [h, sx, sy, r] of labels) {
       const w = ctx.measureText(h.name).width, must = h === S.hoverHub || (near && h === near.h);
       let box = null;
@@ -640,7 +640,7 @@
       ctx.fillStyle = C.dest; ctx.fill();
       ctx.lineWidth = 2.5; ctx.strokeStyle = C.halo; ctx.stroke();
     }
-    ctx.font = "11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+    ctx.font = "11px 'Libre Franklin', 'Helvetica Neue', Arial, sans-serif";
     ctx.fillStyle = C.muted;
     PANELS.forEach((P, p) => {
       if (!p) return;
@@ -767,7 +767,7 @@
       ctx.lineTo(mx - ux * 5 - uy * 5, my - uy * 5 + ux * 5); ctx.lineTo(mx - ux * 5 + uy * 5, my - uy * 5 - ux * 5); ctx.closePath();
       ctx.fillStyle = C.dest; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = C.halo; ctx.stroke();
     }
-    ctx.font = "600 11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+    ctx.font = "600 11px 'Libre Franklin', 'Helvetica Neue', Arial, sans-serif";
     ctx.textBaseline = "middle";
     const used = [];
     pts.forEach((q, j) => {
@@ -907,7 +907,7 @@
     ctx.lineWidth = 5; ctx.strokeStyle = C.halo; ctx.stroke();
     ctx.lineWidth = 2.5; ctx.strokeStyle = C.dest; ctx.stroke();
     ctx.restore();
-    ctx.font = "600 11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+    ctx.font = "600 11px 'Libre Franklin', 'Helvetica Neue', Arial, sans-serif";
     ctx.textBaseline = "middle"; ctx.lineJoin = "round";
     pts.forEach((q) => {
       if (!q.tags.length) return;
@@ -1415,6 +1415,7 @@
 
   window.addEventListener("resize", () => { resize(); });
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); legend(); draw(); });
+  if (document.fonts) document.fonts.ready.then(() => draw()); // map labels use the web font once it has loaded
 
   load().catch((err) => {
     console.error(err);
