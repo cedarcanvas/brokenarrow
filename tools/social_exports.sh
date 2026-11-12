@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-SOURCE_DIR="/Users/michaelfloyd/Library/CloudStorage/Dropbox/0-Drafts to print"
+SOURCE_DIR="/Users/michaelfloyd/Library/CloudStorage/Dropbox/Maps/0-Drafts to print"
+# Optional: ONLY=<slug> rebuilds one artwork, e.g. ONLY=4-vail-hachures tools/social_exports.sh <output dir>
+ONLY="${ONLY:-}"
 STAMP="$(date +%Y-%m-%d)"
 OUTPUT_DIR="${1:-$PWD/social_media_exports_${STAMP}}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/social_exports.XXXXXX")"
@@ -12,7 +14,9 @@ typeset -a SOURCES=(
   "1-High Parks of Colorado.pdf"
   "2-Tomichi.pdf"
   "3-Minturn_Gold.pdf"
-  "4-Vail_hachures.pdf"
+  # "slug::full path" = a source outside SOURCE_DIR. This is the 2026 Vail hachure map (map area only);
+  # the 2021 version is retired in _old_vail_hachures_2021 and must not be used.
+  "4-vail-hachures::/Users/michaelfloyd/Library/CloudStorage/Dropbox/Maps/Store Images/Vail Hachures/web/vail-hachures-2026-map-area-6000.jpg"
   "6-DenvertotheGulf.pdf"
   "7-Vail80sMap.pdf"
   "GoreRange.pdf"
@@ -39,11 +43,11 @@ mkdir -p "$OUTPUT_DIR"
 MANIFEST="$OUTPUT_DIR/manifest.csv"
 README="$OUTPUT_DIR/README.txt"
 
-cat > "$MANIFEST" <<'EOF'
-source,slug,format,width,height,mode,output_path
-EOF
+if [[ -z "$ONLY" || ! -f "$MANIFEST" ]]; then
+  print -r -- "source,slug,format,width,height,mode,output_path" > "$MANIFEST"
+fi
 
-cat > "$README" <<EOF
+[[ -n "$ONLY" && -f "$README" ]] || cat > "$README" <<EOF
 Social media exports generated on ${STAMP}
 
 Formats:
@@ -174,13 +178,22 @@ make_pad_export() {
 }
 
 for source_name in "${SOURCES[@]}"; do
-  source_path="$SOURCE_DIR/$source_name"
+  if [[ "$source_name" == *"::"* ]]; then
+    base_slug="${source_name%%::*}"
+    source_path="${source_name#*::}"
+    source_name="${source_path:t}"
+  else
+    source_path="$SOURCE_DIR/$source_name"
+    base_slug="$(slugify "$source_name")"
+  fi
+  if [[ -n "$ONLY" && "$base_slug" != "$ONLY" ]]; then
+    continue
+  fi
   if [[ ! -f "$source_path" ]]; then
     print -u2 "Skipping missing source: $source_name"
     continue
   fi
 
-  base_slug="$(slugify "$source_name")"
   art_dir="$OUTPUT_DIR/$base_slug"
   mkdir -p "$art_dir"
 
