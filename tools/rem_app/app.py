@@ -326,6 +326,8 @@ def create_job():
     args = [sys.executable, "-u", os.path.join(HERE, "pipeline.py"), "run", "--river", river,
             "--res", str(res), "--cmap", cmap, "--out", out, "--page", page, "--orientation", orientation,
             "--title", title, "--subtitle", subtitle, *ramp_cli_args(ramp_opts), *label_cli_args(label_opts)]
+    if body.get("delete_dem"):
+        args.append("--delete-dem")
     if stretch:
         stretch_path = os.path.join(out, "stretch_input.geojson")
         with open(stretch_path, "w") as f:
@@ -370,6 +372,23 @@ def restyle_job(job_id):
     log.flush()
     procs[job_id] = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT, cwd=out)
     return jsonify({"id": job_id}), 202
+
+
+@app.post("/api/jobs/<job_id>/delete-dem")
+def delete_dem_job(job_id):
+    """Delete a finished run's DEM to free disk; the run can still be recoloured."""
+    out = job_dir(job_id)
+    job = read_job(job_id)
+    if job.get("status") == "running" or (procs.get(job_id) and procs[job_id].poll() is None):
+        abort(409, "This run is still in progress.")
+    if not (job.get("files") or {}).get("dem"):
+        abort(400, "This run's DEM is already deleted.")
+    with open(os.path.join(out, "job.json")) as f:
+        manifest = json.load(f)
+    freed = pipeline.delete_dem(out, manifest, pipeline._job_saver(out, manifest))
+    if not freed:
+        abort(400, "Kept the DEM: this run has no saved hillshade, so it couldn't be recoloured without it.")
+    return jsonify({"freed_mb": round(freed / 1e6)})
 
 
 @app.get("/api/jobs/<job_id>")

@@ -231,6 +231,9 @@
 
   <section id="s-run">
     <h2><span class="num">5</span>Generate</h2>
+    <label style="display:flex;gap:6px;align-items:center;margin:0 0 10px">
+      <input type="checkbox" id="delete-dem"> Delete the DEM when done (saves disk; Recolor still works)
+    </label>
     <button id="btn-run" class="primary" disabled>Generate REM</button>
     <div id="run-msg" class="muted" style="margin-top:8px"></div>
     <div id="progress" hidden>
@@ -249,6 +252,7 @@
     <div class="dl" id="downloads"></div>
     <div style="margin-top:12px">
       <button id="btn-recolor">Recolor this run</button>
+      <button id="btn-delete-dem" title="Free disk space; Recolor keeps working">Delete DEM</button>
       <div class="muted" style="margin-top:6px">Applies the color ramp, steps, labels and title above to this run's
         existing elevation data, with no new download. Each color style keeps its own print files.</div>
     </div>
@@ -722,7 +726,8 @@ function updateRunButton() {
 $("btn-run").onclick = async () => {
   $("run-msg").textContent = "";
   const res = await api("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(Object.assign({ river: state.selected, res: +$("res").value, cmap: cmapValue() },
+    body: JSON.stringify(Object.assign({ river: state.selected, res: +$("res").value, cmap: cmapValue(),
+                                         delete_dem: $("delete-dem").checked },
       state.mode === "stretch"
         ? { stretch: state.stretch }
         : { bbox: state.bbox },
@@ -818,7 +823,21 @@ function showResult(job, fit) {
                  ["Stretch", f.stretch], ["Print frame", f.frame], ["Corridor", f.corridor]].filter(([, name]) => name);
   $("downloads").innerHTML = links.map(([t, name]) =>
     `<a href="${base}${encodeURIComponent(name)}?dl=1&v=${v}">${t}</a>`).join("");
+  $("btn-delete-dem").hidden = !f.dem;
 }
+$("btn-delete-dem").onclick = async () => {
+  const id = state.resultId;
+  if (!id || !confirm("Delete this run's DEM? Recolor keeps working, but the DEM can't be downloaded again from here.")) return;
+  const res = await api(`/api/jobs/${encodeURIComponent(id)}/delete-dem`, { method: "POST" }, true, true);
+  if (res.error) { alert(res.error); return; }
+  $("btn-delete-dem").hidden = true;
+  const job = await api(`/api/jobs/${encodeURIComponent(id)}`, {}, true);
+  if (job) showResult(job, false);
+  $("run-msg").textContent = `Deleted the DEM, freeing ${res.freed_mb.toLocaleString()} MB.`;
+};
+// remember the delete-DEM choice between visits
+try { $("delete-dem").checked = localStorage.getItem("rem.deleteDem") === "1"; } catch (e) {}
+$("delete-dem").onchange = () => { try { localStorage.setItem("rem.deleteDem", $("delete-dem").checked ? "1" : "0"); } catch (e) {} };
 $("opacity").oninput = () => state.overlay && state.overlay.setOpacity(+$("opacity").value);
 $("show-lines").onchange = () => {
   for (const layer of [state.riverLayer, state.rect, state.stretchLayer, state.frameLayer, ...state.pins]) {

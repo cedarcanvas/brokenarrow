@@ -12,6 +12,7 @@ Usage (run inside the rem_env conda env):
     pipeline.py restyle --run river_rem_runs/<run> [--cmap mako] [--ramp stepped] [--spacing log] [--first 2]
 """
 import argparse
+import glob
 import hashlib
 import json
 import math
@@ -867,6 +868,9 @@ def make_viz(dem: str, rem_tif: str, out_dir: str, cmap: str, table_path: str,
         hillshade = cached[0]
         log("Reusing saved hillshade")
     else:
+        if not os.path.isfile(dem):
+            raise RuntimeError("This run's DEM was deleted and its saved hillshade is missing, so it can't be "
+                               "recoloured. Generate it again.")
         dem_viz = rasterviz.RasterViz(dem, out_dir=hs_dir, out_ext=".tif")
         dem_viz.make_hillshade(multidirectional=True, z=z)
         hillshade = dem_viz.hillshade_ras
@@ -961,6 +965,11 @@ def place_names(out_dir: str, manifest: dict) -> str | None:
 
     frame = manifest["print_frame"]
     epsg = frame["epsg"]
+    dem_path = os.path.join(out_dir, manifest["files"].get("dem") or "")
+    saved = os.path.join(out_dir, "places.gpkg")
+    if not os.path.isfile(dem_path) and os.path.isfile(saved):
+        log("Place names: reusing this run's saved names and elevations (DEM was deleted)")
+        return os.path.abspath(saved)
     try:
         found = _gnis_landforms(tuple(manifest["bbox"]))
     except Exception as exc:
@@ -969,7 +978,8 @@ def place_names(out_dir: str, manifest: dict) -> str | None:
     to_utm = Transformer.from_crs(4326, epsg, always_xy=True)
     frame_utm = shp_transform(to_utm.transform, shape(frame["frame"]))
     rows, seen_ids, kept = [], set(), []
-    with rasterio.open(os.path.join(out_dir, manifest["files"]["dem"])) as dem:
+    dem = rasterio.open(dem_path) if os.path.isfile(dem_path) else None   # None: names without elevations
+    try:
         for p in found:
             if p["cls"] not in LANDFORM_PRIORITY:
                 continue
@@ -987,7 +997,7 @@ def place_names(out_dir: str, manifest: dict) -> str | None:
             kept.append((name, p["cls"], (x, y)))
             p = {**p, "name": name}
             elev_ft = None
-            if p["cls"] in WITH_ELEVATION:
+            if p["cls"] in WITH_ELEVATION and dem is not None:
                 r = 60 if p["cls"] == "Summit" else 0
                 row, col = dem.index(x, y)
                 win = ((max(row - int(r / dem.res[1]), 0), row + int(r / dem.res[1]) + 1),
@@ -1001,6 +1011,9 @@ def place_names(out_dir: str, manifest: dict) -> str | None:
                 label = name + (f"\n{elev_ft:,} ft" if elev_ft else "")
             rows.append({"name": p["name"], "cls": p["cls"], "elev_ft": elev_ft, "label": label,
                          "priority": LANDFORM_PRIORITY[p["cls"]], "geometry": Point(x, y)})
+    finally:
+        if dem is not None:
+            dem.close()
     if not rows:
         log("No named landforms in this frame")
         return None
@@ -1033,7 +1046,9 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
                   places: bool | None = None) -> None:
     """Colour the REM, then build the map preview and print layout. Used by run() and restyle()."""
     files = manifest["files"]
-    dem, rem_tif = os.path.join(out_dir, files["dem"]), os.path.join(out_dir, files["rem"])
+    # a run with its DEM deleted keeps the name, for output file names and the saved hillshade
+    dem = os.path.join(out_dir, files.get("dem") or manifest.get("dem_deleted") or "dem.tif")
+    rem_tif = os.path.join(out_dir, files["rem"])
     opts = {**RAMP_DEFAULTS, **ramp_opts}
     units = opts["units"]
     top = opts["top"] or rem_auto_top(rem_tif, units)
@@ -1098,6 +1113,31 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
     save(files=files, bounds=bounds)
 
 
+def delete_dem(out_dir: str, manifest: dict, save) -> int:
+    """Delete a finished run's DEM to save disk; returns bytes freed.
+
+    Recolouring still works: it needs only the REM, the hillshade saved in .hillshade/ and
+    places.gpkg (summit elevations are read from the DEM once, when the run is made).
+    """
+    name = manifest["files"].get("dem")
+    if not name:
+        return 0
+    if not glob.glob(os.path.join(out_dir, ".hillshade", "*hillshade*.tif")):
+        log("Keeping the DEM: there is no saved hillshade to recolour from without it")
+        return 0
+    if manifest.get("print_frame") and not os.path.isfile(os.path.join(out_dir, "places.gpkg")):
+        place_names(out_dir, manifest)   # summit elevations come from the DEM: save them while it's here
+    freed = 0
+    for path in (os.path.join(out_dir, name), os.path.join(out_dir, name + ".aux.xml")):
+        if os.path.isfile(path):
+            freed += os.path.getsize(path)
+            os.remove(path)
+    manifest["files"].pop("dem")
+    save(dem_deleted=name)
+    log(f"Deleted the DEM ({freed / 1e6:,.0f} MB); recolouring still works")
+    return freed
+
+
 def _job_saver(out_dir: str, manifest: dict):
     path = os.path.join(out_dir, "job.json")
 
@@ -1112,7 +1152,7 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
         bbox: tuple | None = None, stretch: dict | None = None, corridor_m: float = 1500,
         page: str = "11x17", orientation: str = "auto", title: str | None = None,
         subtitle: str | None = None, make_pdf: bool = True, ramp_opts: dict | None = None,
-        label_opts: dict | None = None, places: bool | None = None) -> dict:
+        label_opts: dict | None = None, places: bool | None = None, keep_dem: bool = True) -> dict:
     """Generate a REM and print layout for `river`, framed on a drawn bbox or a stretch (GeoJSON, EPSG:4326).
 
     ramp_opts: style, log, steps, top, units, first (see ramp()); top=None uses RiverREM's automatic top.
@@ -1170,6 +1210,8 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
             manifest["files"]["stretch"] = "stretch.geojson"
 
         style_outputs(out_dir, manifest, save, cmap, ramp_opts or {}, title, subtitle, make_pdf, label_opts, places)
+        if not keep_dem:
+            delete_dem(out_dir, manifest, save)
         save(status="done", step="done", finished=datetime.now().isoformat(timespec="seconds"))
         log(f"Done: {out_dir}")
     except Exception as exc:
@@ -1182,14 +1224,15 @@ def run(river: str, res_m: float, cmap: str, out_dir: str | None = None, *,
 def restyle(out_dir: str, cmap: str | None = None, ramp_opts: dict | None = None,
             title: str | None = None, subtitle: str | None = None, make_pdf: bool = True,
             label_opts: dict | None = None, places: bool | None = None) -> dict:
-    """Recolour a finished run and rebuild its preview and print, reusing its DEM and REM (no download).
+    """Recolour a finished run and rebuild its preview and print, reusing its REM and saved hillshade (no download).
 
     Options left as None keep the run's previous values.
     """
     with open(os.path.join(out_dir, "job.json")) as f:
         manifest = json.load(f)
     files = manifest.get("files", {})
-    missing = [k for k in ("dem", "rem") if not files.get(k) or not os.path.exists(os.path.join(out_dir, files[k]))]
+    needed = ("rem",) if manifest.get("dem_deleted") else ("dem", "rem")   # deleted DEM: hillshade is saved
+    missing = [k for k in needed if not files.get(k) or not os.path.exists(os.path.join(out_dir, files[k]))]
     if missing:
         raise RuntimeError(f"This run has no saved {' or '.join(missing).upper()}, so it can't be recoloured.")
     if not manifest.get("print_frame"):   # runs from before print_frame was stored kept it in print_spec.json
@@ -1293,6 +1336,8 @@ def main() -> int:
     g.add_argument("--title", help="map title (default: river name)")
     g.add_argument("--subtitle", help="map subtitle (default: River Relative Elevation Model)")
     g.add_argument("--no-print", action="store_true", help="skip the QGIS print layout")
+    g.add_argument("--delete-dem", action="store_true",
+                   help="delete the DEM once the run is done to save disk (recolouring still works)")
     g.add_argument("--out", default=None)
     add_ramp_args(g)
     s = sub.add_parser("restyle", help="recolour a finished run without downloading again")
@@ -1335,7 +1380,7 @@ def main() -> int:
     run(river, args.res, args.cmap, args.out, bbox=tuple(args.bbox) if args.bbox else None,
         stretch=stretch, corridor_m=args.corridor, page=args.page, orientation=args.orientation,
         title=args.title, subtitle=args.subtitle, make_pdf=not args.no_print, ramp_opts=ramp_from_args(args),
-        label_opts=labels_from_args(args), places=args.places)
+        label_opts=labels_from_args(args), places=args.places, keep_dem=not args.delete_dem)
     return 0
 
 

@@ -68,6 +68,11 @@ Opens http://127.0.0.1:5057.
    of a new download. Opening a past run loads its color settings into the controls to tweak
    from. Each color style gets its own print files, so you can compare versions. A run whose
    print or recolor failed can still be recolored, since its elevation data is kept.
+7. **Delete the DEM** to save disk. Tick *Delete the DEM when done* above Generate; the app
+   remembers the choice. Or click **Delete DEM** under Result for a run you already made.
+   Recolor keeps working: it needs only the REM, the hillshade saved in `.hillshade/`, and
+   `places.gpkg`. Summit elevations are read from the DEM before it is deleted. On the
+   command line, use `run … --delete-dem`.
 
 ### Print layout
 
