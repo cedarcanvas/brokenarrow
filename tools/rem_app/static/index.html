@@ -227,6 +227,21 @@
       <div id="ramp-labels"></div>
     </div>
     <div id="ramp-note" class="muted"></div>
+    <label style="margin-top:12px">Clip colors to the valley</label>
+    <div class="row" style="flex-wrap:nowrap">
+      <div style="flex:1"><label for="clip-width">Width each side (<span class="unit">ft</span>)</label>
+        <input id="clip-width" type="text" inputmode="decimal" placeholder="off"></div>
+      <div style="flex:1"><label for="clip-height">Height above river (<span class="unit">ft</span>)</label>
+        <input id="clip-height" type="text" inputmode="decimal" placeholder="off"></div>
+    </div>
+    <div class="row" style="flex-wrap:nowrap">
+      <div style="flex:1"><label for="clip-outside">Outside the clip</label>
+        <select id="clip-outside"><option value="relief" selected>Grey shaded relief</option>
+          <option value="blank">Blank</option></select></div>
+    </div>
+    <div class="muted" style="margin-top:4px">For a valley-bottom view: color only ground near the river
+      (e.g. 1,500 ft each side) and/or low above it (e.g. 20 ft). Blank = off. An automatic top then fits the
+      colors to what's shown.</div>
   </section>
 
   <section id="s-run">
@@ -561,7 +576,9 @@ function rampParams() {
            ramp_steps: +$("ramp-steps").value, ramp_units: $("ramp-units").value,
            ramp_top: $("ramp-top").value.trim() || "auto",
            ramp_first: (ramp.style === "stepped" && $("ramp-first").value.trim()) || "auto",
-           ramp_invert: $("ramp-invert").checked ? 1 : 0 };
+           ramp_invert: $("ramp-invert").checked ? 1 : 0,
+           clip_width: $("clip-width").value.trim(), clip_height: $("clip-height").value.trim(),
+           clip_outside: $("clip-outside").value };
 }
 function labelParams() {
   return { label_color: $("label-color").value, label_scope: $("label-scope").value,
@@ -581,7 +598,8 @@ $("ramp-units").addEventListener("change", () => {
   for (const s of document.querySelectorAll(".unit")) s.textContent = $("ramp-units").value;
   refreshRamp();
 });
-for (const id of ["ramp-top", "ramp-first"]) {
+$("clip-outside").addEventListener("change", refreshRamp);
+for (const id of ["ramp-top", "ramp-first", "clip-width", "clip-height"]) {
   $(id).oninput = () => { clearTimeout(ramp.timer); ramp.timer = setTimeout(refreshRamp, 350); };
 }
 
@@ -786,6 +804,9 @@ function applyRampSettings(job) {
   for (const s of document.querySelectorAll(".unit")) s.textContent = $("ramp-units").value;
   $("ramp-top").value = r.top ?? r.top_ft ?? "";
   $("ramp-first").value = r.first ?? "";
+  $("clip-width").value = r.clip_width ?? "";
+  $("clip-height").value = r.clip_height ?? "";
+  $("clip-outside").value = r.clip_outside || "relief";
   if (job.title && job.title !== job.river) $("title").value = job.title;
   if (job.subtitle !== undefined) $("subtitle").value = job.subtitle;
   setRampStyle(r.style || "smooth");

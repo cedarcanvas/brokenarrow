@@ -183,14 +183,14 @@ def parse_ramp(src) -> dict:
     if not 2 <= steps <= 30:
         abort(400, "Steps must be between 2 and 30.")
 
-    def height(key: str, label: str, low: float, high: float) -> float | None:
+    def height(key: str, label: str, low: float, high: float, blank: str = "auto") -> float | None:
         raw = src.get(key)
-        if raw in (None, "", "auto"):
+        if raw in (None, "", "auto", "off"):
             return None
         try:
             value = float(str(raw).replace(",", ""))
         except ValueError:
-            abort(400, f"{label} must be a number of {pipeline.UNIT_NAMES[units]}, or blank for auto.")
+            abort(400, f"{label} must be a number of {pipeline.UNIT_NAMES[units]}, or blank for {blank}.")
         if not low <= value <= high:
             abort(400, f"{label} must be between {low:g} and {high:,g} {units}.")
         return value
@@ -200,7 +200,13 @@ def parse_ramp(src) -> dict:
     if first is not None and top is not None and first >= top:
         abort(400, "Lowest band must be smaller than the top of the ramp.")
     invert = str(src.get("ramp_invert", "0")).lower() in ("1", "true", "yes")
-    return {"style": style, "log": log, "steps": steps, "top": top, "units": units, "first": first, "invert": invert}
+    clip_width = height("clip_width", "Clip width", 1, 100000, "off")
+    clip_height = height("clip_height", "Clip height", 0.5, 20000, "off")
+    clip_outside = str(src.get("clip_outside", "relief"))
+    if clip_outside not in pipeline.CLIP_OUTSIDE:
+        abort(400, "Outside the clip must be relief or blank.")
+    return {"style": style, "log": log, "steps": steps, "top": top, "units": units, "first": first, "invert": invert,
+            "clip_width": clip_width, "clip_height": clip_height, "clip_outside": clip_outside}
 
 
 def parse_labels(src) -> dict:
@@ -221,7 +227,9 @@ def label_cli_args(opts: dict) -> list[str]:
 def ramp_cli_args(opts: dict) -> list[str]:
     return ["--ramp", opts["style"], "--spacing", "log" if opts["log"] else "linear", "--steps", str(opts["steps"]),
             "--units", opts["units"], "--top", str(opts["top"] or "auto"), "--first", str(opts["first"] or "auto"),
-            "--invert" if opts["invert"] else "--no-invert"]
+            "--invert" if opts["invert"] else "--no-invert",
+            "--clip-width", str(opts["clip_width"] or "off"), "--clip-height", str(opts["clip_height"] or "off"),
+            "--clip-outside", opts["clip_outside"]]
 
 
 @app.get("/api/ramp")
@@ -229,12 +237,13 @@ def ramp_preview():
     """Legend for a colour ramp, so the page can preview it before running."""
     opts = parse_ramp(request.args)
     try:
-        legend = pipeline.ramp(parse_cmap(request.args.get("cmap")), opts["top"] or PREVIEW_TOP[opts["units"]],
+        legend = pipeline.ramp(parse_cmap(request.args.get("cmap")),
+                               opts["top"] or opts["clip_height"] or PREVIEW_TOP[opts["units"]],
                                opts["style"], opts["log"], opts["steps"], opts["units"], opts["first"],
                                opts["invert"])["legend"]
     except ValueError as exc:
         abort(400, str(exc))
-    legend["auto_top"] = opts["top"] is None
+    legend["auto_top"] = opts["top"] is None and opts["clip_height"] is None
     legend["preview_top"] = PREVIEW_TOP[opts["units"]]
     return jsonify(legend)
 
