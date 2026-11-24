@@ -33,6 +33,7 @@ import geopandas as gpd
 import rasterio
 from rasterio.merge import merge
 from rasterio.warp import transform_bounds
+from rasterio.windows import Window
 import shapely
 from shapely.geometry import LineString, box, shape
 
@@ -640,8 +641,23 @@ RAMP_STEPS = (4, 6, 8, 10, 12, 16, 20, 24)
 MAX_CLASSES = 30
 
 
-def rem_auto_top(rem_tif: str, units: str = "ft") -> float:
-    """RiverREM's default ramp top: half the REM's maximum, in `units`."""
+def rem_auto_top(rem_tif: str, units: str = "ft", near: str | None = None) -> float:
+    """RiverREM's default ramp top: half the REM's maximum, in `units`.
+
+    near: a raster from _near_river; the maximum is then taken only where it is 1 (a width clip),
+    so the colours are spent on the part of the map that shows them.
+    """
+    if near:
+        top_m = 0.0
+        with rasterio.open(rem_tif) as rem, rasterio.open(near) as nr:
+            rows = max(1, 64_000_000 // (rem.width * 5))
+            for row in range(0, rem.height, rows):
+                win = Window(0, row, rem.width, min(rows, rem.height - row))
+                values = rem.read(1, window=win, masked=True)
+                values = values[(nr.read(1, window=win) == 1) & ~values.mask]
+                if values.size:
+                    top_m = max(top_m, float(values.max()))
+        return max(0.5 * top_m / UNITS[units], 1.0)
     from osgeo import gdal
 
     gdal.UseExceptions()
@@ -834,7 +850,8 @@ def make_print(spec: dict, out_dir: str) -> dict:
 
 
 RAMP_DEFAULTS = {"style": "smooth", "log": True, "steps": 12, "top": None, "units": "ft", "first": None,
-                 "invert": False}
+                 "invert": False, "clip_width": None, "clip_height": None, "clip_outside": "relief"}
+CLIP_OUTSIDE = ("relief", "blank")   # what the clipped-away area shows: grey shaded relief, or nothing
 LABEL_DEFAULTS = {"color": "auto", "scope": "river"}   # color: auto | white | black | off; scope: river | all
 LABEL_INKS = {"white": "#ffffff", "black": "#1d2a2f"}
 NOT_A_STREAM = ("ditch", "canal", "lateral", "drain", "flume", "pipeline", "aqueduct")
@@ -849,12 +866,12 @@ WITH_ELEVATION = ("Summit", "Gap")   # labelled "Name / 14,197 ft", as in the 14
 
 
 def make_viz(dem: str, rem_tif: str, out_dir: str, cmap: str, table_path: str,
-             z: float = 4, blend_percent: float = 25) -> str:
+             z: float = 4, blend_percent: float = 25, clip: dict | None = None) -> str:
     """Colour the REM with `table_path` and blend it with the DEM's hillshade.
 
     Mirrors REMMaker.make_rem_viz, but keeps the hillshade (it depends only on the DEM) in
     <run>/.hillshade/ so recolouring a run skips it. Returns the hillshade-colour GeoTIFF;
-    a georeferenced PNG is written next to it.
+    a georeferenced PNG is written next to it. `clip` (see clip_viz) limits the colour to the valley.
     """
     import glob
     from riverrem import RasterViz as rasterviz
@@ -886,9 +903,99 @@ def make_viz(dem: str, rem_tif: str, out_dir: str, cmap: str, table_path: str,
     rem_viz.out_rasters["hillshade-color"] = os.path.join(out_dir, f"{dem_name}_hillshade-color.tif")
     rem_viz.hillshade_ras = hillshade
     rem_viz.viz_srs = rem_viz.proj
+    if clip:   # mask before the PNG is made, so both copies match
+        rem_viz.make_png = False
     viz_tif = rem_viz.make_hillshade_color(blend_percent=blend_percent)
+    if clip:
+        clip_viz(viz_tif, rem_tif, hillshade, work, **clip)
+        rem_viz.raster_to_png(viz_tif)
     shutil.rmtree(work, ignore_errors=True)
     return viz_tif
+
+
+def _near_river(like_tif: str, centerline: str, width_m: float, work: str) -> str:
+    """Byte raster on `like_tif`'s grid: 1 within `width_m` of the centerline, 0 beyond (GDAL streams it)."""
+    from osgeo import gdal
+
+    gdal.UseExceptions()
+    like = gdal.Open(like_tif)
+    with rasterio.open(like_tif) as src:
+        crs = src.crs
+    lines = gpd.read_file(centerline).to_crs(crs)
+    lines_path = os.path.join(work, "clip_lines.gpkg")
+    lines.to_file(lines_path, driver="GPKG")
+    opts = ["COMPRESS=DEFLATE", "TILED=YES"]
+    tiff = gdal.GetDriverByName("GTiff")
+    burn_path, near_path = os.path.join(work, "clip_burn.tif"), os.path.join(work, "clip_near.tif")
+    for path in (burn_path, near_path):
+        ds = tiff.Create(path, like.RasterXSize, like.RasterYSize, 1, gdal.GDT_Byte, opts)
+        ds.SetGeoTransform(like.GetGeoTransform())
+        ds.SetProjection(like.GetProjection())
+        ds = None
+    burn = gdal.Open(burn_path, gdal.GA_Update)
+    gdal.Rasterize(burn, lines_path, burnValues=[1], allTouched=True)
+    near = gdal.Open(near_path, gdal.GA_Update)
+    gdal.ComputeProximity(burn.GetRasterBand(1), near.GetRasterBand(1),
+                          ["VALUES=1", "DISTUNITS=GEO", f"MAXDIST={width_m}", "FIXED_BUF_VAL=1", "NODATA=0"])
+    burn = near = like = None
+    return near_path
+
+
+def clip_viz(viz_tif: str, rem_tif: str, hillshade: str, work: str, width_m: float | None = None,
+             height_m: float | None = None, outside: str = "relief", centerline: str | None = None,
+             near: str | None = None) -> None:
+    """Keep the REM colours only near the river, in place.
+
+    width_m: distance each side of the centerline; height_m: height above the river surface.
+    Either can be None; `near` reuses a _near_river raster already made. Elsewhere the map shows light grey shaded relief (outside="relief") or is
+    left empty (outside="blank", transparent in the preview, paper on the print).
+    """
+    if width_m and not near:
+        near = _near_river(viz_tif, centerline, width_m, work)
+    clipped = os.path.join(work, "clipped.tif")   # RiverREM writes a COG, which can't be updated in place
+    with rasterio.open(viz_tif) as viz:
+        profile = {**viz.profile, "driver": "GTiff", "tiled": True, "blockxsize": 256, "blockysize": 256,
+                   "compress": "deflate"}
+    with rasterio.open(viz_tif) as viz, rasterio.open(clipped, "w", **profile) as out, \
+            rasterio.open(rem_tif) as rem, rasterio.open(hillshade) as hs, \
+            (rasterio.open(near) if near else _nullcontext()) as near_ds:
+        rows = max(1, 64_000_000 // (viz.width * 8))   # ~64 MB of pixels at a time
+        kept = total = 0
+        for row in range(0, viz.height, rows):
+            win = Window(0, row, viz.width, min(rows, viz.height - row))
+            rgb = viz.read(window=win)
+            keep = rgb.any(axis=0)
+            total += int(keep.sum())
+            if height_m is not None:
+                keep &= rem.read(1, window=win) <= height_m
+            if near_ds is not None:
+                keep &= near_ds.read(1, window=win) == 1
+            kept += int(keep.sum())
+            if outside == "relief":   # light grey relief; 0 stays nodata
+                shade = hs.read(1, window=win).astype("float32")
+                fill = (shade * 0.5 + 120).clip(1, 255).astype("uint8")
+                fill[shade == 0] = 0
+            else:
+                fill = 0
+            for b in range(3):
+                rgb[b][~keep] = fill[~keep] if outside == "relief" else 0
+            out.write(rgb, window=win)
+        for b in range(1, 4):
+            out.set_band_description(b, viz.descriptions[b - 1] or "")
+        out.colorinterp = viz.colorinterp
+    os.replace(clipped, viz_tif)
+    parts = ([f"within {width_m:,.0f} m of the river"] if width_m else []) + \
+            ([f"up to {height_m:,.1f} m above {'it' if width_m else 'the river'}"] if height_m is not None else [])
+    log(f"Clipped the colours to {' and '.join(parts)}: {kept / max(total, 1):.0%} of the map"
+        + (", grey relief elsewhere" if outside == "relief" else ", blank elsewhere"))
+
+
+class _nullcontext:
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *exc):
+        return False
 
 
 def label_layers(out_dir: str, manifest: dict, scope: str) -> list[dict]:
@@ -1051,7 +1158,20 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
     rem_tif = os.path.join(out_dir, files["rem"])
     opts = {**RAMP_DEFAULTS, **ramp_opts}
     units = opts["units"]
-    top = opts["top"] or rem_auto_top(rem_tif, units)
+    u = UNITS[units]
+    clip, clip_dir = None, os.path.join(out_dir, ".clip")
+    if opts.get("clip_width") or opts.get("clip_height"):
+        clip = {"width_m": opts["clip_width"] * u if opts.get("clip_width") else None,
+                "height_m": opts["clip_height"] * u if opts.get("clip_height") else None,
+                "outside": opts.get("clip_outside") or "relief",
+                "centerline": os.path.join(out_dir, files.get("centerline") or "centerline.gpkg")}
+        if clip["width_m"]:
+            if not os.path.isfile(clip["centerline"]):
+                raise RuntimeError("This run has no saved centerline, so it can't be clipped by width.")
+            os.makedirs(clip_dir, exist_ok=True)
+            clip["near"] = _near_river(rem_tif, clip["centerline"], clip["width_m"], clip_dir)
+    # an automatic top ends the colours at the clip height, or else is set from the part of the map shown
+    top = opts["top"] or opts.get("clip_height") or rem_auto_top(rem_tif, units, (clip or {}).get("near"))
     colors = ramp(cmap, top, opts["style"], opts["log"], opts["steps"], units, opts["first"], opts["invert"])
     table_path = os.path.join(out_dir, "color_table.txt")
     with open(table_path, "w") as f:
@@ -1061,12 +1181,16 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
         f"{'log' if legend['log'] else 'linear'}, top {top:,.0f} {units}"
         + (f", {len(legend['classes'])} classes from {legend['classes'][0][1]:g} {units}"
            if opts["style"] == "stepped" else ""))
+    clip_note = clip_text(opts)
     title = title or manifest.get("title") or manifest["river"]
     subtitle = subtitle if subtitle is not None else manifest.get("subtitle", "River Relative Elevation Model")
     labels = {**LABEL_DEFAULTS, **(manifest.get("labels") or {}), **(label_opts or {})}
     places = manifest.get("places", True) if places is None else places
     save(step="viz", cmap=cmap, ramp=opts, title=title, subtitle=subtitle, labels=labels, places=places)
-    viz_tif = make_viz(dem, rem_tif, out_dir, cmap, table_path)
+    try:
+        viz_tif = make_viz(dem, rem_tif, out_dir, cmap, table_path, clip=clip)
+    finally:
+        shutil.rmtree(clip_dir, ignore_errors=True)
 
     save(step="preview")
     preview = os.path.join(out_dir, "preview_4326.png")
@@ -1083,7 +1207,7 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
         data = "USGS NHD HighRes" if source == "NHD" else "© OpenStreetMap contributors"
         slug = "".join(c if c.isalnum() else "-" for c in manifest["river"].lower()).strip("-")
         style = (f"{ramps.slug(cmap)}{'-inverted' if opts['invert'] else ''}"
-                 f"-{opts['style']}")
+                 f"-{opts['style']}{clip_slug(opts)}")
         ink = label_ink(labels["color"], legend)
         spec_labels = None
         if ink:
@@ -1099,8 +1223,9 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
             "legend": legend,
             "labels": spec_labels,
             "places": place_names(out_dir, manifest) if places else None,
-            "credits": (f"Elevation: USGS 3DEP {manifest['res_m']:g} m  ·  River: {data}  ·  "
-                        f"REM: RiverREM  ·  UTM {frame['epsg'] - 26900}N  ·  {datetime.now():%b %Y}"),
+            "credits": (f"{clip_note}\n" if clip_note else "")
+                       + (f"Elevation: USGS 3DEP {manifest['res_m']:g} m  ·  River: {data}  ·  "
+                          f"REM: RiverREM  ·  UTM {frame['epsg'] - 26900}N  ·  {datetime.now():%b %Y}"),
             # one set of print files per colour style, so restyles don't overwrite each other
             "basename": f"{slug}_{frame['page']}_{frame['orientation']}_{style}",
             "dpi": 300,
@@ -1111,6 +1236,20 @@ def style_outputs(out_dir: str, manifest: dict, save, cmap: str, ramp_opts: dict
     elif make_pdf:
         log("No print frame saved for this run; skipping the print layout.")
     save(files=files, bounds=bounds)
+
+
+def clip_text(opts: dict) -> str | None:
+    """Print note for a clipped map, e.g. "Colour shown within 1,000 ft of the river, up to 20 ft above it"."""
+    units, w, h = opts.get("units", "ft"), opts.get("clip_width"), opts.get("clip_height")
+    parts = ([f"within {w:,g} {units} of the river"] if w else []) + \
+            ([f"up to {h:,g} {units} above {'it' if w else 'the river'}"] if h else [])
+    return f"Colour shown {', '.join(parts)}" if parts else None
+
+
+def clip_slug(opts: dict) -> str:
+    """File-name part for a clipped style, so it doesn't overwrite the unclipped print."""
+    units, w, h = opts.get("units", "ft"), opts.get("clip_width"), opts.get("clip_height")
+    return (f"-w{w:g}{units}" if w else "") + (f"-h{h:g}{units}" if h else "")
 
 
 def delete_dem(out_dir: str, manifest: dict, save) -> int:
@@ -1273,6 +1412,13 @@ def add_ramp_args(sp, keep: bool = False) -> None:
     sp.add_argument("--top", default=d("auto"), help="height where the ramp ends, or 'auto'")
     sp.add_argument("--first", default=d("auto"),
                     help="stepped ramps: height of the lowest band (e.g. 2 with --units m), or 'auto'")
+    sp.add_argument("--clip-width", default=d("off"),
+                    help="colour only within this distance of the river, each side (in --units), or 'off'")
+    sp.add_argument("--clip-height", default=d("off"),
+                    help="colour only up to this height above the river (in --units), or 'off'; "
+                         "an automatic --top then ends at this height")
+    sp.add_argument("--clip-outside", default=d("relief"), choices=CLIP_OUTSIDE,
+                    help="what clipped areas show: light grey shaded relief, or blank")
     sp.add_argument("--invert", default=d(False), action=argparse.BooleanOptionalAction,
                     help="run the colormap backwards (--no-invert to undo on restyle)")
     sp.add_argument("--labels", default=d("auto"), choices=("auto", "white", "black", "off"),
@@ -1300,6 +1446,12 @@ def ramp_from_args(args) -> dict:
             opts[key] = None if str(value).lower() == "auto" else float(value)
     if args.invert is not None:
         opts["invert"] = args.invert
+    for key in ("clip_width", "clip_height"):
+        value = getattr(args, key)
+        if value is not None:
+            opts[key] = None if str(value).lower() in ("off", "none", "0") else float(value)
+    if args.clip_outside is not None:
+        opts["clip_outside"] = args.clip_outside
     return opts
 
 

@@ -58,6 +58,12 @@ Opens http://127.0.0.1:5057.
    - **Units**: feet or metres, for these fields and the print legend.
    - **Invert colors**: runs the ramp backwards (e.g. a pale, glowing river against dark
      high ground). Works with any palette.
+   - **Clip colors to the valley**: color only the ground within a set distance of the river
+     (each side) and/or up to a set height above it, for a valley-bottom view. Either can be
+     left blank. Outside the clip the map shows light grey shaded relief, or is blank. With an
+     automatic top, the ramp ends at the clip height, or (width only) at half the highest point
+     inside the strip, so the colors are spent on what's shown. The print notes the clip above
+     the credits, and clipped styles get their own print files (`…-w1500ft-h20ft.pdf`).
    - The strip under the controls previews the bands and labels. With an automatic top it
      assumes 500 ft / 150 m, because the real top is only known once the REM is computed.
    Smooth + Logarithmic + automatic top matches RiverREM's default look.
@@ -142,6 +148,10 @@ conda run -n rem_env python tools/rem_app/pipeline.py run --start -106.150 38.87
 # recolor an existing run without downloading again; options left out keep the run's values
 conda run -n rem_env python tools/rem_app/pipeline.py restyle --run river_rem_runs/<run> \
     --cmap rocket --first 3 --invert --labels auto --label-scope all   # --no-places to drop landform names
+
+# valley-bottom view: color within 1,500 ft of the river and up to 20 ft above it ('off' to remove)
+conda run -n rem_env python tools/rem_app/pipeline.py restyle --run river_rem_runs/<run> \
+    --clip-width 1500 --clip-height 20 --clip-outside relief      # or --clip-outside blank
 
 # other ramps: a QGIS style-library ramp, an imported XML ramp, or custom stops (river first)
     --cmap qgis:Turbo    --cmap "file:Elevation Ramp"    --cmap custom:0b1d3a-2a6f97-8fc1d4-f4f1de
